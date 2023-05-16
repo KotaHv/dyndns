@@ -1,0 +1,79 @@
+name: Build Releases
+on:
+  push:
+    tags:
+      - v*
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-cross:
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: full
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - armv7-unknown-linux-musleabihf
+          - aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: ${{ matrix.target }}
+          toolchain: nightly
+          default: true
+          override: true
+      - name: Install cross
+        run: cargo install cross
+      - name: Build ${{ matrix.target }}
+        timeout-minutes: 120
+        run: |
+          cross build --release --target ${{ matrix.target }} &&
+          mv target/${{ matrix.target }}/release/dyndns target/${{ matrix.target }}/release/dyndns-${{ matrix.target }}
+      - name: Upload Github Assets
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: target/${{ matrix.target }}/release/dyndns-${{ matrix.target }}
+          prerelease: ${{ contains(github.ref, '-') }}
+
+  build-unix:
+    runs-on: ${{ matrix.os }}
+    env:
+      RUST_BACKTRACE: full
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    strategy:
+      matrix:
+        os: [macos-latest]
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: ${{ matrix.target }}
+          toolchain: nightly
+          default: true
+          override: true
+      - name: Build release
+        shell: bash
+        run: |
+          cargo build --release --target ${{ matrix.target }} &&
+          mv target/${{ matrix.target }}/release/dyndns target/${{ matrix.target }}/release/dyndns-${{ matrix.target }}
+      - name: Upload Github Assets
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: target/${{ matrix.target }}/release/dyndns-${{ matrix.target }}
+          prerelease: ${{ contains(github.ref, '-') }}
