@@ -15,7 +15,7 @@ pub fn run_migrations() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let path = Path::new(&CONFIG.database_url);
     if let Some(path) = path.parent() {
         if !path.exists() {
-            create_dir_all(path).unwrap();
+            create_dir_all(path)?;
         }
     }
     let mut connection = diesel::sqlite::SqliteConnection::establish(&CONFIG.database_url)?;
