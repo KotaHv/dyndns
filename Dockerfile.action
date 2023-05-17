@@ -1,0 +1,24 @@
+FROM ghcr.io/kotahv/dyndns-vue:latest as dyndns-vue
+
+FROM alpine:latest as builder
+
+ARG DOWNLOAD_BASE
+RUN ARCH=$(uname -m | sed -e "s/armv7l/armv7-unknown-linux-musleabihf/g" | sed -e "s/aarch64/aarch64-unknown-linux-musl/g" | sed -e "s/x86_64/x86_64-unknown-linux-musl/g") && \
+    apk add --no-cache curl && \
+    curl -L "${DOWNLOAD_BASE}/dyndns-${ARCH}" -o /dyndns && \
+    chmod +x /dyndns
+
+FROM alpine:latest
+
+ENV DYNDNS_ADDR=0.0.0.0:80 DYNDNS_DEBUG=false DYNDNS_WEB_DIR=/dyndns-vue DYNDNS_DATABASE_URL=/dyndns/data/dyndns.db
+
+VOLUME /dyndns/data
+EXPOSE 80
+
+WORKDIR /dyndns
+COPY --from=builder /dyndns .
+COPY --from=dyndns-vue /dyndns-vue /dyndns-vue
+
+COPY docker/start.sh /start.sh
+
+CMD [ "/start.sh" ]
