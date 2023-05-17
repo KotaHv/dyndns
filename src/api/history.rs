@@ -36,7 +36,6 @@ async fn history(
     State(pool): State<DbPool>,
     Query(pagination): Query<Pagination>,
 ) -> Result<Json<HistoryRes>, Error> {
-    warn!("{:?}", pagination);
     let conn = pool.get().await?;
     let (histories, total) = History::paginate(&conn, pagination.page, pagination.per_page).await?;
     Ok(Json(HistoryRes::new(total, histories)))
