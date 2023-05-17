@@ -85,8 +85,8 @@ impl<'de> Deserialize<'de> for SortKey {
     {
         let s = String::deserialize(deserializer)?;
         let s = match s.as_str() {
-            "old" => Self::Old,
-            "new" => Self::New,
+            "old_ip" => Self::Old,
+            "new_ip" => Self::New,
             "version" => Self::Version,
             _ => Self::Updated,
         };
@@ -122,35 +122,17 @@ impl Default for SortBy {
     }
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(default)]
-struct HistoryQuery {
-    #[serde(flatten)]
-    pagination: Pagination,
-    #[serde(flatten)]
-    sort_items: SortBy,
-}
-
-impl Default for HistoryQuery {
-    fn default() -> Self {
-        Self {
-            pagination: Pagination::default(),
-            sort_items: SortBy::default(),
-        }
-    }
-}
-
 async fn history(
     State(pool): State<DbPool>,
-    Query(query): Query<HistoryQuery>,
+    Query(pagination): Query<Pagination>,
+    Query(sort_items): Query<SortBy>,
 ) -> Result<Json<HistoryRes>, Error> {
-    let pagination = query.pagination;
     let conn = pool.get().await?;
     let (histories, total) = History::paginate(
         &conn,
         pagination.page,
         pagination.per_page,
-        query.sort_items.order(),
+        sort_items.order(),
     )
     .await?;
     Ok(Json(HistoryRes::new(total, histories)))
