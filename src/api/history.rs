@@ -1,5 +1,7 @@
+use async_trait::async_trait;
 use axum::{
-    extract::{Query, State},
+    extract::{FromRequestParts, Query, State},
+    http::{request::Parts, StatusCode},
     routing::get,
     Json, Router,
 };
@@ -36,9 +38,17 @@ impl Default for Pagination {
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 struct SortBy {
-    #[serde(rename = "sortby")]
     key: SortKey,
     order: SortOrder,
+}
+
+impl Default for SortBy {
+    fn default() -> Self {
+        Self {
+            key: SortKey::Updated,
+            order: SortOrder::Desc,
+        }
+    }
 }
 
 impl SortBy {
@@ -113,11 +123,29 @@ impl<'de> Deserialize<'de> for SortOrder {
     }
 }
 
-impl Default for SortBy {
-    fn default() -> Self {
-        Self {
-            key: SortKey::Updated,
-            order: SortOrder::Desc,
+struct SortItems(Vec<SortBy>);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for SortItems
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, String);
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        #[derive(Deserialize)]
+        struct A {
+            sort_items: String,
+        }
+        let results = Query::<A>::from_request_parts(parts, state).await;
+        match results {
+            Ok(Query(results)) => {
+                let results = serde_json::from_str::<Vec<SortBy>>(results.sort_items.as_str());
+                match results {
+                    Ok(sort_items) => Ok(Self(sort_items)),
+                    Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+                }
+            }
+            Err(_) => Ok(Self(vec![SortBy::default()])),
         }
     }
 }
@@ -125,16 +153,12 @@ impl Default for SortBy {
 async fn history(
     State(pool): State<DbPool>,
     Query(pagination): Query<Pagination>,
-    Query(sort_items): Query<SortBy>,
+    SortItems(sort_items): SortItems,
 ) -> Result<Json<HistoryRes>, Error> {
+    let sort_items: Vec<BoxHistoryOrder> = sort_items.into_iter().map(|v| v.order()).collect();
     let conn = pool.get().await?;
-    let (histories, total) = History::paginate(
-        &conn,
-        pagination.page,
-        pagination.per_page,
-        sort_items.order(),
-    )
-    .await?;
+    let (histories, total) =
+        History::paginate(&conn, pagination.page, pagination.per_page, sort_items).await?;
     Ok(Json(HistoryRes::new(total, histories)))
 }
 

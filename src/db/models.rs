@@ -205,12 +205,15 @@ impl History {
         conn: &DbConn,
         page: usize,
         per_page: i64,
-        order: BoxHistoryOrder,
+        order: Vec<BoxHistoryOrder>,
     ) -> Result<(Vec<Self>, i64), Error> {
         conn.interact(move |conn| {
-            history::table
+            let mut query = history::table.into_boxed();
+            for o in order {
+                query = query.then_order_by(o);
+            }
+            query
                 .select(Self::as_select())
-                .order(order)
                 .paginate(page as i64)
                 .per_page(per_page)
                 .load_and_total(conn)
