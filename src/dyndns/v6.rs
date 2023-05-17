@@ -85,11 +85,8 @@ fn get_new_ip_blocking(interface: String) -> Result<Ipv6Addr, Error> {
                 }
             }
         }
-        if !ipv6_list.is_empty() {
-            if ipv6_list.len() == 1 {
-                return Ok(ipv6_list[0]);
-            }
-            return Ok(ipv6_list[ipv6_list.len() - 2]);
+        if let Some(ipv6) = ipv6_list.last() {
+            return Ok(ipv6.to_owned());
         }
     }
     Err(Error::Ipv6NotFound)
