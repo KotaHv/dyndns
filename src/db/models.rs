@@ -8,9 +8,11 @@ use chrono::{NaiveDateTime, Utc};
 
 use diesel::{
     deserialize::FromSql,
+    expression::expression_types::NotSelectable,
     prelude::*,
     serialize::{IsNull, ToSql},
     sql_types::Integer,
+    sqlite::Sqlite,
     AsExpression, FromSqlRow,
 };
 use serde::{de, Deserialize, Serialize};
@@ -195,15 +197,20 @@ pub struct History {
     updated: NaiveDateTime,
 }
 
+pub type BoxHistoryOrder =
+    Box<dyn BoxableExpression<history::table, Sqlite, SqlType = NotSelectable>>;
+
 impl History {
     pub async fn paginate(
         conn: &DbConn,
         page: usize,
         per_page: i64,
+        order: BoxHistoryOrder,
     ) -> Result<(Vec<Self>, i64), Error> {
         conn.interact(move |conn| {
             history::table
                 .select(Self::as_select())
+                .order(order)
                 .paginate(page as i64)
                 .per_page(per_page)
                 .load_and_total(conn)

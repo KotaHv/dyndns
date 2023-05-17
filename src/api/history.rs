@@ -3,10 +3,11 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::Deserialize;
+use diesel::ExpressionMethods;
+use serde::{Deserialize, Deserializer};
 
 use crate::{
-    db::{History, HistoryIpVersion, HistoryRes},
+    db::{history, BoxHistoryOrder, History, HistoryIpVersion, HistoryRes},
     AppState, DbPool, Error,
 };
 
@@ -32,12 +33,126 @@ impl Default for Pagination {
     }
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(default)]
+struct SortBy {
+    #[serde(rename = "sortby")]
+    key: SortKey,
+    order: SortOrder,
+}
+
+impl SortBy {
+    fn order(&self) -> BoxHistoryOrder {
+        match self.order {
+            SortOrder::Desc => self.key.desc(),
+            SortOrder::Asc => self.key.asc(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum SortKey {
+    Old,
+    New,
+    Version,
+    Updated,
+}
+
+impl SortKey {
+    fn desc(&self) -> BoxHistoryOrder {
+        match self {
+            SortKey::Old => Box::new(history::old_ip.desc()),
+            SortKey::New => Box::new(history::new_ip.desc()),
+            SortKey::Version => Box::new(history::version.desc()),
+            SortKey::Updated => Box::new(history::updated.desc()),
+        }
+    }
+
+    fn asc(&self) -> BoxHistoryOrder {
+        match self {
+            SortKey::Old => Box::new(history::old_ip.asc()),
+            SortKey::New => Box::new(history::new_ip.asc()),
+            SortKey::Version => Box::new(history::version.asc()),
+            SortKey::Updated => Box::new(history::updated.asc()),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SortKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let s = match s.as_str() {
+            "old" => Self::Old,
+            "new" => Self::New,
+            "version" => Self::Version,
+            _ => Self::Updated,
+        };
+        Ok(s)
+    }
+}
+
+#[derive(Debug)]
+enum SortOrder {
+    Desc,
+    Asc,
+}
+
+impl<'de> Deserialize<'de> for SortOrder {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "asc" => Ok(Self::Asc),
+            _ => Ok(Self::Desc),
+        }
+    }
+}
+
+impl Default for SortBy {
+    fn default() -> Self {
+        Self {
+            key: SortKey::Updated,
+            order: SortOrder::Desc,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(default)]
+struct HistoryQuery {
+    #[serde(flatten)]
+    pagination: Pagination,
+    #[serde(flatten)]
+    sort_items: SortBy,
+}
+
+impl Default for HistoryQuery {
+    fn default() -> Self {
+        Self {
+            pagination: Pagination::default(),
+            sort_items: SortBy::default(),
+        }
+    }
+}
+
 async fn history(
     State(pool): State<DbPool>,
-    Query(pagination): Query<Pagination>,
+    Query(query): Query<HistoryQuery>,
 ) -> Result<Json<HistoryRes>, Error> {
+    let pagination = query.pagination;
     let conn = pool.get().await?;
-    let (histories, total) = History::paginate(&conn, pagination.page, pagination.per_page).await?;
+    let (histories, total) = History::paginate(
+        &conn,
+        pagination.page,
+        pagination.per_page,
+        query.sort_items.order(),
+    )
+    .await?;
     Ok(Json(HistoryRes::new(total, histories)))
 }
 
