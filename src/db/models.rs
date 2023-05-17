@@ -208,11 +208,11 @@ impl History {
         order: Vec<BoxHistoryOrder>,
     ) -> Result<(Vec<Self>, i64), Error> {
         conn.interact(move |conn| {
-            let mut query = history::table.into_boxed();
-            for o in order {
-                query = query.then_order_by(o);
-            }
-            query
+            order
+                .into_iter()
+                .fold(history::table.into_boxed(), |query, o| {
+                    query.then_order_by(o)
+                })
                 .select(Self::as_select())
                 .paginate(page as i64)
                 .per_page(per_page)
