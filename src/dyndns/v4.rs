@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::check::{CheckIp, CheckResult, GetIp};
-use super::{Error, CLIENT};
+use super::{Error, CLIENT_V4};
 use crate::{
     db::{History, IpVersion},
     DbPool,
@@ -25,7 +25,7 @@ pub struct Params {
 impl GetIp for Params {
     type Ip = Ipv4Addr;
     async fn get_new_ip(&self) -> Result<Self::Ip, Error> {
-        let res = CLIENT
+        let res = CLIENT_V4
             .get(IPV4_URL)
             .send()
             .await?

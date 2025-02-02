@@ -1,55 +1,22 @@
-use std::{
-    fmt::Display,
-    net::{Ipv4Addr, Ipv6Addr},
-};
+use std::net::Ipv4Addr;
 
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 
-use super::{Error, CLIENT};
+use super::{Error, CLIENT_V4, CLIENT_V6};
 
 static DYNDNS_GOOD: &'static str = "good";
-
-#[derive(Default)]
-pub struct MyIp {
-    pub v4: Option<Ipv4Addr>,
-    pub v6: Option<Ipv6Addr>,
-}
-
-impl MyIp {
-    fn serialize<S>(myip: &Self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(myip.to_string().as_str())
-    }
-}
-
-impl Display for MyIp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = vec![];
-        if let Some(ip) = self.v4 {
-            s.push(ip.to_string())
-        }
-        if let Some(ip) = self.v6 {
-            s.push(ip.to_string())
-        }
-        let s = s.join(",");
-        write!(f, "{}", s)
-    }
-}
 
 #[derive(Serialize)]
 pub struct Params {
     hostname: String,
-    #[serde(serialize_with = "MyIp::serialize")]
-    pub myip: MyIp,
+    my_ip: Option<String>,
 }
 
 impl Params {
     fn new(hostname: String) -> Self {
         Self {
             hostname,
-            myip: MyIp::default(),
+            my_ip: None,
         }
     }
 }
@@ -58,7 +25,7 @@ pub struct DynDNSAPI {
     server: String,
     username: String,
     password: String,
-    pub params: Params,
+    params: Params,
 }
 
 impl DynDNSAPI {
@@ -70,9 +37,32 @@ impl DynDNSAPI {
             params: Params::new(hostname),
         }
     }
-    pub async fn update(&self) -> Result<bool, Error> {
+    pub async fn update_v6(&mut self) -> Result<bool, Error> {
         let url = format!("https://{}/nic/update", &self.server);
-        let res = CLIENT
+        self.params.my_ip = None;
+        let res = CLIENT_V6
+            .get(url)
+            .basic_auth(&self.username, Some(&self.password))
+            .query(&self.params)
+            .send()
+            .await?;
+        let status = res.status();
+        let text = match res.text().await {
+            Ok(text) => text.trim().to_string(),
+            Err(err) => format!("{err:?}"),
+        };
+        if status.is_success() && text == DYNDNS_GOOD {
+            debug!("{DYNDNS_GOOD}");
+            Ok(true)
+        } else {
+            error!("code: {status}, msg: {text}");
+            Ok(false)
+        }
+    }
+    pub async fn update_v4(&mut self, v4: &Ipv4Addr) -> Result<bool, Error> {
+        let url = format!("https://{}/nic/update", &self.server);
+        self.params.my_ip = Some(v4.to_string());
+        let res = CLIENT_V4
             .get(url)
             .basic_auth(&self.username, Some(&self.password))
             .query(&self.params)

@@ -22,15 +22,24 @@ use crate::{
 
 use self::{api::DynDNSAPI, check::CheckResult};
 
-pub static CLIENT: Lazy<Client> = Lazy::new(|| {
+pub static CLIENT_V4: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .timeout(Duration::from_secs(5))
+        .local_address("0.0.0.0:0".parse().ok())
+        .build()
+        .unwrap()
+});
+
+pub static CLIENT_V6: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .timeout(Duration::from_secs(5))
+        .local_address("[::]:0".parse().ok())
         .build()
         .unwrap()
 });
 
 pub fn launch(pool: DbPool, rx: Receiver<u64>) -> task::JoinHandle<()> {
-    info!("dyndns api start");
+    info!("dyn_dns api start");
     tokio::spawn(check_loop(pool, rx))
 }
 
@@ -87,13 +96,13 @@ async fn join(
     pool: &DbPool,
     enable: IpVersion,
     interface: String,
-) -> (CheckResult<Ipv4Addr>, CheckResult<Ipv6Addr>) {
+) -> (CheckResult<Ipv4Addr>, CheckResult<Vec<Ipv6Addr>>) {
     let v4 = v4::Params {
         pool: pool.clone(),
         enable: enable.clone(),
     };
     let v6 = v6::Params {
-        pool: pool.clone(),
+        db_pool: pool.clone(),
         enable: enable.clone(),
         interface,
     };
@@ -102,42 +111,39 @@ async fn join(
 }
 
 async fn check(pool: &DbPool) -> Result<(), Error> {
-    let config = get_dyndns_config(&pool).await?;
+    let config = get_dyn_dns_config(&pool).await?;
     let enable = config.ip;
     let interface = config.interface;
     let (v4, v6) = join(pool, enable, interface).await;
-    let mut dyndns_api = DynDNSAPI::new(
-        config.server,
-        config.username,
-        config.password,
-        config.hostname,
-    );
-    dyndns_api.params.myip.v4 = v4.new;
-    dyndns_api.params.myip.v6 = v6.new;
 
     if v4.is_change() || v6.is_change() {
-        update(dyndns_api, pool, v4, v6).await?;
+        let dyn_dns_api = DynDNSAPI::new(
+            config.server,
+            config.username,
+            config.password,
+            config.hostname,
+        );
+        update(dyn_dns_api, pool, v4, v6).await?;
     }
     Ok(())
 }
 
 async fn update(
-    dyndns_api: DynDNSAPI,
+    mut dyn_dns_api: DynDNSAPI,
     pool: &DbPool,
     v4: CheckResult<Ipv4Addr>,
-    v6: CheckResult<Ipv6Addr>,
+    v6: CheckResult<Vec<Ipv6Addr>>,
 ) -> Result<(), Error> {
-    info!(
-        "ip address changed, start update: {}",
-        &dyndns_api.params.myip
-    );
-    if dyndns_api.update().await? {
-        info!("Successful update!");
-        let conn = pool.get().await?;
-        if let Some(new) = dyndns_api.params.myip.v4 {
+    let conn = pool.get().await?;
+    if let Some(new) = v4.new {
+        info!("ipv4 address changed, start update: {}", &new);
+        if dyn_dns_api.update_v4(&new).await? {
             History::insert_v4(&conn, v4.old, new).await?;
         }
-        if let Some(new) = dyndns_api.params.myip.v6 {
+    }
+    if let Some(new) = v6.new {
+        info!("ipv6 address changed, start update: {:#?}", &new);
+        if dyn_dns_api.update_v6().await? {
             History::insert_v6(&conn, v6.old, new).await?;
         }
     }
@@ -145,7 +151,7 @@ async fn update(
     Ok(())
 }
 
-async fn get_dyndns_config(pool: &DbPool) -> Result<DynDNS, Error> {
+async fn get_dyn_dns_config(pool: &DbPool) -> Result<DynDNS, Error> {
     let conn = pool.get().await?;
     Ok(DynDNS::get(&conn).await?)
 }
