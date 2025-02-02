@@ -1,7 +1,6 @@
 use std::net::Ipv4Addr;
 
 use async_trait::async_trait;
-use serde::Deserialize;
 
 use super::check::{CheckIp, CheckResult, GetIp};
 use super::{Error, CLIENT_V4};
@@ -10,12 +9,8 @@ use crate::{
     DbPool,
 };
 
-static IPV4_URL: &'static str = "https://myip4.ipip.net/ip";
+static IPV4_URL: &'static str = "https://api-ipv4.ip.sb/ip";
 
-#[derive(Deserialize)]
-struct IpEnableJson {
-    ip: Ipv4Addr,
-}
 pub struct Params {
     pub pool: DbPool,
     pub enable: IpVersion,
@@ -25,13 +20,12 @@ pub struct Params {
 impl GetIp for Params {
     type Ip = Ipv4Addr;
     async fn get_new_ip(&self) -> Result<Self::Ip, Error> {
-        let res = CLIENT_V4
-            .get(IPV4_URL)
-            .send()
-            .await?
-            .json::<IpEnableJson>()
-            .await?;
-        Ok(res.ip)
+        let res = CLIENT_V4.get(IPV4_URL).send().await?;
+        let ip_str = res.text().await?;
+        Ok(ip_str
+            .trim()
+            .parse()
+            .map_err(|_e| Error::IPv4ParseError(ip_str))?)
     }
     async fn get_old_ip(&self) -> Result<Option<Self::Ip>, Error> {
         let conn = self.pool.get().await?;

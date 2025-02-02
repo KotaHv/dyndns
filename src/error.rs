@@ -27,6 +27,8 @@ pub enum Error {
     Ipv6NotFound,
     #[error("{0}")]
     Interface(#[from] LError),
+    #[error("Failed to parse IPv4 address : {0}")]
+    IPv4ParseError(String),
 }
 
 #[derive(Serialize)]
