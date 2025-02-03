@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::net::{IpAddr, Ipv6Addr};
 
 use async_trait::async_trait;
@@ -23,41 +22,68 @@ pub struct Params {
 
 #[async_trait]
 impl GetIp for Params {
-    type Ip = Vec<Ipv6Addr>;
-    async fn get_new_ip(&self) -> Result<Self::Ip, Error> {
+    type NewIp = Vec<Ipv6Addr>;
+    type OldIp = (Option<Vec<Ipv6Addr>>, Vec<Ipv6Addr>);
+    async fn get_new_ip(&self) -> Result<Self::NewIp, Error> {
         let interface = self.interface.clone();
         spawn_blocking(move || get_ipv6_addresses(&interface)).await?
     }
-    async fn get_old_ip(&self) -> Result<Option<Self::Ip>, Error> {
+    async fn get_old_ip(&self) -> Result<Option<Self::OldIp>, Error> {
         let conn = self.db_pool.get().await?;
         Ok(History::get_v6(&conn)
             .await?
-            .map(|ip_str| parse_ipv6_list(&ip_str)))
+            .map(|(old_ip_opt, new_ip_str)| {
+                (
+                    old_ip_opt.map(|old_ip_str| parse_ipv6_list(&old_ip_str)),
+                    parse_ipv6_list(&new_ip_str),
+                )
+            }))
     }
 }
 
 #[async_trait]
 impl CheckIp<Vec<Ipv6Addr>> for Params {
     async fn check_result(&self) -> Result<super::check::CheckResult<Vec<Ipv6Addr>>, Error> {
-        let mut result = super::check::CheckResult::default();
+        let mut check_result = super::check::CheckResult::default();
         if let IpVersion::V4 = self.enable {
-            return Ok(result);
+            return Ok(check_result);
         }
         debug!("check v6");
 
-        let old_ips = self.get_old_ip().await?;
-        debug!("{:?}", &old_ips);
-        let new_ips = self.get_new_ip().await?;
+        let previous_ips_opt = self.get_old_ip().await?;
+        debug!("{:?}", &previous_ips_opt);
 
-        let changed_ips = match &old_ips {
-            Some(existing) => find_new_ips(existing, &new_ips),
-            None => new_ips,
+        let current_ips = self.get_new_ip().await?;
+
+        let (previous_ips, new_ips) = match previous_ips_opt {
+            Some((db_old_ips_opt, db_new_ips)) => {
+                let mut existing_ips = vec![];
+
+                if let Some(db_old_ips) = &db_old_ips_opt {
+                    for prev_ip in db_old_ips {
+                        existing_ips.push(prev_ip)
+                    }
+                }
+
+                for curr_ip in &db_new_ips {
+                    existing_ips.push(curr_ip)
+                }
+
+                let (new_ips, mut previous_ips): (Vec<Ipv6Addr>, Vec<Ipv6Addr>) = current_ips
+                    .into_iter()
+                    .partition(|ip| !existing_ips.contains(&ip));
+
+                if previous_ips.is_empty() {
+                    previous_ips = db_new_ips;
+                }
+                (Some(previous_ips), (!new_ips.is_empty()).then_some(new_ips))
+            }
+            None => (None, Some(current_ips)),
         };
+        check_result.new = new_ips;
+        check_result.old = previous_ips;
 
-        result.old = old_ips;
-        result.new = (!changed_ips.is_empty()).then_some(changed_ips);
-
-        Ok(result)
+        Ok(check_result)
     }
 }
 
@@ -81,13 +107,5 @@ fn parse_ipv6_list(input: &str) -> Vec<Ipv6Addr> {
     input
         .split(',')
         .filter_map(|s| s.trim().parse().ok())
-        .collect()
-}
-
-fn find_new_ips(existing: &[Ipv6Addr], new: &[Ipv6Addr]) -> Vec<Ipv6Addr> {
-    let existing_set: HashSet<&Ipv6Addr> = existing.iter().collect();
-    new.iter()
-        .filter(|ip| !existing_set.contains(ip))
-        .copied()
         .collect()
 }

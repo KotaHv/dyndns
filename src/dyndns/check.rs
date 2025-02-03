@@ -24,9 +24,10 @@ impl<T> CheckResult<T> {
 
 #[async_trait]
 pub trait GetIp {
-    type Ip;
-    async fn get_new_ip(&self) -> Result<Self::Ip, Error>;
-    async fn get_old_ip(&self) -> Result<Option<Self::Ip>, Error>;
+    type NewIp;
+    type OldIp;
+    async fn get_new_ip(&self) -> Result<Self::NewIp, Error>;
+    async fn get_old_ip(&self) -> Result<Option<Self::OldIp>, Error>;
 }
 
 #[async_trait]

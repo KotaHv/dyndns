@@ -18,8 +18,9 @@ pub struct Params {
 
 #[async_trait]
 impl GetIp for Params {
-    type Ip = Ipv4Addr;
-    async fn get_new_ip(&self) -> Result<Self::Ip, Error> {
+    type NewIp = Ipv4Addr;
+    type OldIp = Ipv4Addr;
+    async fn get_new_ip(&self) -> Result<Self::NewIp, Error> {
         let res = CLIENT_V4.get(IPV4_URL).send().await?;
         let ip_str = res.text().await?;
         Ok(ip_str
@@ -27,7 +28,7 @@ impl GetIp for Params {
             .parse()
             .map_err(|_e| Error::IPv4ParseError(ip_str))?)
     }
-    async fn get_old_ip(&self) -> Result<Option<Self::Ip>, Error> {
+    async fn get_old_ip(&self) -> Result<Option<Self::OldIp>, Error> {
         let conn = self.pool.get().await?;
         let ip = History::get_v4(&conn).await?;
         if let Some(ip) = ip {

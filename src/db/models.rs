@@ -12,7 +12,7 @@ use diesel::{
     prelude::*,
     serialize::{IsNull, ToSql},
     sql_types::Integer,
-    sqlite::Sqlite,
+    sqlite::{Sqlite, SqliteValue},
     AsExpression, FromSqlRow,
 };
 use serde::{de, Deserialize, Serialize};
@@ -43,9 +43,7 @@ impl ToSql<Integer, diesel::sqlite::Sqlite> for IpVersion {
 }
 
 impl FromSql<Integer, diesel::sqlite::Sqlite> for IpVersion {
-    fn from_sql(
-        bytes: diesel::backend::RawValue<'_, diesel::sqlite::Sqlite>,
-    ) -> diesel::deserialize::Result<Self> {
+    fn from_sql(bytes: SqliteValue<'_, '_, '_>) -> diesel::deserialize::Result<Self> {
         match i32::from_sql(bytes)? {
             1 => Ok(Self::V4),
             2 => Ok(Self::V6),
@@ -307,14 +305,10 @@ impl History {
         Self::get_new_ip(conn, HistoryIpVersion::V4).await
     }
 
-    pub async fn get_v6(conn: &DbConn) -> Result<Option<String>, Error> {
-        Self::get_new_ip(conn, HistoryIpVersion::V6).await
-    }
-
-    pub async fn get_v46(conn: &DbConn) -> Result<(Option<String>, Option<String>), Error> {
-        let v4 = Self::get_v4(conn).await?;
-        let v6 = Self::get_v6(conn).await?;
-        Ok((v4, v6))
+    pub async fn get_v6(conn: &DbConn) -> Result<Option<(Option<String>, String)>, Error> {
+        Ok(Self::get_current(conn, HistoryIpVersion::V6)
+            .await?
+            .map(|history| (history.old_ip, history.new_ip)))
     }
 
     pub async fn get_current(
@@ -343,9 +337,7 @@ pub enum HistoryIpVersion {
 }
 
 impl FromSql<Integer, diesel::sqlite::Sqlite> for HistoryIpVersion {
-    fn from_sql(
-        bytes: diesel::backend::RawValue<'_, diesel::sqlite::Sqlite>,
-    ) -> diesel::deserialize::Result<Self> {
+    fn from_sql(bytes: SqliteValue<'_, '_, '_>) -> diesel::deserialize::Result<Self> {
         match i32::from_sql(bytes)? {
             1 => Ok(Self::V4),
             2 => Ok(Self::V6),
