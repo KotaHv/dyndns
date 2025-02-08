@@ -2,14 +2,35 @@ use std::net::Ipv4Addr;
 
 use async_trait::async_trait;
 
-use super::check::{CheckIp, CheckResult, GetIp};
-use super::{Error, CLIENT_V4};
+use super::check::{CheckIpTrait, CheckResultTrait, GetIpTrait};
+use super::{Error, CLIENT};
 use crate::{
     db::{History, IpVersion},
     DbPool,
 };
 
-static IPV4_URL: &'static str = "https://api-ipv4.ip.sb/ip";
+static LOOKUP_URL: &'static str = "https://api-ipv4.ip.sb/ip";
+
+#[derive(Debug, Default)]
+pub struct Ipv4CheckResult {
+    old: Option<Ipv4Addr>,
+    new: Option<Ipv4Addr>,
+}
+
+impl CheckResultTrait for Ipv4CheckResult {
+    type IpType = Option<Ipv4Addr>;
+
+    fn old(&self) -> &Self::IpType {
+        &self.old
+    }
+
+    fn new(&self) -> &Self::IpType {
+        &self.new
+    }
+    fn is_changed(&self) -> bool {
+        self.new.is_some()
+    }
+}
 
 pub struct Params {
     pub pool: DbPool,
@@ -17,11 +38,11 @@ pub struct Params {
 }
 
 #[async_trait]
-impl GetIp for Params {
+impl GetIpTrait for Params {
     type NewIp = Ipv4Addr;
     type OldIp = Ipv4Addr;
     async fn get_new_ip(&self) -> Result<Self::NewIp, Error> {
-        let res = CLIENT_V4.get(IPV4_URL).send().await?;
+        let res = CLIENT.get(LOOKUP_URL).send().await?;
         let ip_str = res.text().await?;
         Ok(ip_str
             .trim()
@@ -39,9 +60,10 @@ impl GetIp for Params {
 }
 
 #[async_trait]
-impl CheckIp<Ipv4Addr> for Params {
-    async fn check_result(&self) -> Result<CheckResult<Ipv4Addr>, Error> {
-        let mut result = CheckResult::default();
+impl CheckIpTrait for Params {
+    type ResultType = Ipv4CheckResult;
+    async fn check_result(&self) -> Result<Ipv4CheckResult, Error> {
+        let mut result = Ipv4CheckResult::default();
         if let IpVersion::V6 = self.enable {
             return Ok(result);
         }

@@ -10,9 +10,39 @@ use crate::{
 };
 
 use super::{
-    check::{CheckIp, GetIp},
-    Error,
+    check::{CheckIpTrait, CheckResultTrait, GetIpTrait},
+    Error, CLIENT,
 };
+
+static LOOKUP_URL: &'static str = "https://api-ipv6.ip.sb/ip";
+
+#[derive(Debug, Default)]
+pub struct Ipv6CheckResult {
+    old: Option<Vec<Ipv6Addr>>,
+    new: Option<Vec<Ipv6Addr>>,
+    external: Option<Ipv6Addr>,
+}
+
+impl CheckResultTrait for Ipv6CheckResult {
+    type IpType = Option<Vec<Ipv6Addr>>;
+
+    fn old(&self) -> &Self::IpType {
+        &self.old
+    }
+
+    fn new(&self) -> &Self::IpType {
+        &self.new
+    }
+    fn is_changed(&self) -> bool {
+        self.new.is_some()
+    }
+}
+
+impl Ipv6CheckResult {
+    pub fn external(&self) -> Option<Ipv6Addr> {
+        self.external
+    }
+}
 
 pub struct Params {
     pub db_pool: DbPool,
@@ -21,7 +51,7 @@ pub struct Params {
 }
 
 #[async_trait]
-impl GetIp for Params {
+impl GetIpTrait for Params {
     type NewIp = Vec<Ipv6Addr>;
     type OldIp = (Option<Vec<Ipv6Addr>>, Vec<Ipv6Addr>);
     async fn get_new_ip(&self) -> Result<Self::NewIp, Error> {
@@ -42,9 +72,10 @@ impl GetIp for Params {
 }
 
 #[async_trait]
-impl CheckIp<Vec<Ipv6Addr>> for Params {
-    async fn check_result(&self) -> Result<super::check::CheckResult<Vec<Ipv6Addr>>, Error> {
-        let mut check_result = super::check::CheckResult::default();
+impl CheckIpTrait for Params {
+    type ResultType = Ipv6CheckResult;
+    async fn check_result(&self) -> Result<Ipv6CheckResult, Error> {
+        let mut check_result = Ipv6CheckResult::default();
         if let IpVersion::V4 = self.enable {
             return Ok(check_result);
         }
@@ -82,9 +113,17 @@ impl CheckIp<Vec<Ipv6Addr>> for Params {
         };
         check_result.new = new_ips;
         check_result.old = previous_ips;
-
+        if check_result.is_changed() {
+            check_result.external = get_external_ipv6().await;
+        }
         Ok(check_result)
     }
+}
+
+async fn get_external_ipv6() -> Option<Ipv6Addr> {
+    let res = CLIENT.get(LOOKUP_URL).send().await.ok();
+    let ip_str = res?.text().await.ok();
+    ip_str?.trim().parse().ok()
 }
 
 fn get_ipv6_addresses(interface: &str) -> Result<Vec<Ipv6Addr>, Error> {

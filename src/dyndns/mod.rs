@@ -1,7 +1,4 @@
-use std::{
-    net::{Ipv4Addr, Ipv6Addr},
-    time::Duration,
-};
+use std::time::Duration;
 
 use once_cell::sync::Lazy;
 use reqwest::Client;
@@ -20,20 +17,11 @@ use crate::{
     DbPool,
 };
 
-use self::{api::DynDNSAPI, check::CheckResult};
+use self::{api::DynDNSAPI, check::CheckResultTrait, v4::Ipv4CheckResult, v6::Ipv6CheckResult};
 
-pub static CLIENT_V4: Lazy<Client> = Lazy::new(|| {
+pub static CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .timeout(Duration::from_secs(5))
-        .local_address("0.0.0.0:0".parse().ok())
-        .build()
-        .unwrap()
-});
-
-pub static CLIENT_V6: Lazy<Client> = Lazy::new(|| {
-    Client::builder()
-        .timeout(Duration::from_secs(5))
-        .local_address("[::]:0".parse().ok())
         .build()
         .unwrap()
 });
@@ -96,7 +84,7 @@ async fn join(
     pool: &DbPool,
     enable: IpVersion,
     interface: String,
-) -> (CheckResult<Ipv4Addr>, CheckResult<Vec<Ipv6Addr>>) {
+) -> (Ipv4CheckResult, Ipv6CheckResult) {
     let v4 = v4::Params {
         pool: pool.clone(),
         enable: enable.clone(),
@@ -115,36 +103,39 @@ async fn check(pool: &DbPool) -> Result<(), Error> {
     let enable = config.ip;
     let interface = config.interface;
     let (v4, v6) = join(pool, enable, interface).await;
+    let mut dyndns_api = DynDNSAPI::new(
+        config.server,
+        config.username,
+        config.password,
+        config.hostname,
+    );
+    dyndns_api.params.myip.v4 = v4.new().clone();
+    dyndns_api.params.myip.v6 = v6.external();
 
-    if v4.is_change() || v6.is_change() {
-        let dyn_dns_api = DynDNSAPI::new(
-            config.server,
-            config.username,
-            config.password,
-            config.hostname,
-        );
-        update(dyn_dns_api, pool, v4, v6).await?;
+    if v4.is_changed() || v6.is_changed() {
+        update(dyndns_api, pool, v4, v6).await?;
     }
     Ok(())
 }
 
 async fn update(
-    mut dyn_dns_api: DynDNSAPI,
+    dyn_dns_api: DynDNSAPI,
     pool: &DbPool,
-    v4: CheckResult<Ipv4Addr>,
-    v6: CheckResult<Vec<Ipv6Addr>>,
+    v4: Ipv4CheckResult,
+    v6: Ipv6CheckResult,
 ) -> Result<(), Error> {
-    let conn = pool.get().await?;
-    if let Some(new) = v4.new {
-        info!("ipv4 address changed, start update: {}", &new);
-        if dyn_dns_api.update_v4(&new).await? {
-            History::insert_v4(&conn, v4.old, new).await?;
+    info!(
+        "ip address changed, start update: {}",
+        &dyn_dns_api.params.myip
+    );
+    if dyn_dns_api.update().await? {
+        info!("Successful update!");
+        let conn = pool.get().await?;
+        if let Some(new) = v4.new() {
+            History::insert_v4(&conn, v4.old(), new).await?;
         }
-    }
-    if let Some(new) = v6.new {
-        info!("ipv6 address changed, start update: {:#?}", &new);
-        if dyn_dns_api.update_v6().await? {
-            History::insert_v6(&conn, v6.old, new).await?;
+        if let Some(new) = v6.new() {
+            History::insert_v6(&conn, v6.old(), new).await?;
         }
     }
 

@@ -2,28 +2,15 @@ use async_trait::async_trait;
 
 use super::Error;
 
-pub struct CheckResult<T> {
-    pub old: Option<T>,
-    pub new: Option<T>,
-}
-
-impl<T> Default for CheckResult<T> {
-    fn default() -> Self {
-        Self {
-            old: None,
-            new: None,
-        }
-    }
-}
-
-impl<T> CheckResult<T> {
-    pub fn is_change(&self) -> bool {
-        self.new.is_some()
-    }
+pub trait CheckResultTrait {
+    type IpType;
+    fn old(&self) -> &Self::IpType;
+    fn new(&self) -> &Self::IpType;
+    fn is_changed(&self) -> bool;
 }
 
 #[async_trait]
-pub trait GetIp {
+pub trait GetIpTrait {
     type NewIp;
     type OldIp;
     async fn get_new_ip(&self) -> Result<Self::NewIp, Error>;
@@ -31,23 +18,23 @@ pub trait GetIp {
 }
 
 #[async_trait]
-pub trait CheckIp<T>: 'static + Send + Sync
-where
-    T: 'static + Send + Sync,
-{
-    async fn check_result(&self) -> Result<CheckResult<T>, Error>;
+pub trait CheckIpTrait: 'static + Send + Sync {
+    type ResultType: CheckResultTrait + Default + Send + Sync;
+
+    async fn check_result(&self) -> Result<Self::ResultType, Error>;
 }
 
-pub async fn check<T>(c: impl CheckIp<T>) -> CheckResult<T>
+pub async fn check<C>(c: C) -> C::ResultType
 where
-    T: 'static + Send + Sync,
+    C: CheckIpTrait + Send + Sync,
+    C::ResultType: Default + Send + Sync,
 {
     tokio::spawn(async move {
         match c.check_result().await {
             Ok(result) => result,
             Err(e) => {
                 error!("{}", e);
-                CheckResult::<T>::default()
+                C::ResultType::default()
             }
         }
     })

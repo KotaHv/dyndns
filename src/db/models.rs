@@ -243,10 +243,10 @@ impl History {
 
     pub async fn insert_v4(
         conn: &DbConn,
-        old_ip: Option<Ipv4Addr>,
-        new_ip: Ipv4Addr,
+        old_ip: &Option<Ipv4Addr>,
+        new_ip: &Ipv4Addr,
     ) -> Result<(), Error> {
-        let old_ip = old_ip.map(|v| v.to_string());
+        let old_ip = old_ip.as_ref().map(|v| v.to_string());
         let new_ip = new_ip.to_string();
         let version = HistoryIpVersion::V4;
         let h = History {
@@ -262,10 +262,10 @@ impl History {
 
     pub async fn insert_v6(
         conn: &DbConn,
-        old_ip: Option<Vec<Ipv6Addr>>,
-        new_ip: Vec<Ipv6Addr>,
+        old_ip: &Option<Vec<Ipv6Addr>>,
+        new_ip: &Vec<Ipv6Addr>,
     ) -> Result<(), Error> {
-        let old_ip = old_ip.map(|v| {
+        let old_ip = old_ip.as_ref().map(|v| {
             v.iter()
                 .map(|&x| x.to_string())
                 .collect::<Vec<String>>()
