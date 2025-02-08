@@ -3,7 +3,7 @@ use std::net::Ipv4Addr;
 use async_trait::async_trait;
 
 use super::check::{CheckIpTrait, CheckResultTrait, GetIpTrait};
-use super::{Error, CLIENT};
+use super::{get_http_client, Error};
 use crate::{
     db::{History, IpVersion},
     DbPool,
@@ -42,7 +42,7 @@ impl GetIpTrait for Params {
     type NewIp = Ipv4Addr;
     type OldIp = Ipv4Addr;
     async fn get_new_ip(&self) -> Result<Self::NewIp, Error> {
-        let res = CLIENT.get(LOOKUP_URL).send().await?;
+        let res = get_http_client().await.get(LOOKUP_URL).send().await?;
         let ip_str = res.text().await?;
         Ok(ip_str
             .trim()

@@ -5,7 +5,7 @@ use std::{
 
 use serde::{Serialize, Serializer};
 
-use super::{Error, CLIENT};
+use super::{get_http_client, Error};
 
 static DYNDNS_GOOD: &'static str = "good";
 
@@ -72,7 +72,8 @@ impl DynDNSAPI {
     }
     pub async fn update(&self) -> Result<bool, Error> {
         let url = format!("https://{}/nic/update", &self.server);
-        let res = CLIENT
+        let res = get_http_client()
+            .await
             .get(url)
             .basic_auth(&self.username, Some(&self.password))
             .query(&self.params)

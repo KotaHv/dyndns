@@ -11,7 +11,7 @@ use crate::{
 
 use super::{
     check::{CheckIpTrait, CheckResultTrait, GetIpTrait},
-    Error, CLIENT,
+    get_http_client, Error,
 };
 
 static LOOKUP_URL: &'static str = "https://api-ipv6.ip.sb/ip";
@@ -34,7 +34,7 @@ impl CheckResultTrait for Ipv6CheckResult {
         &self.new
     }
     fn is_changed(&self) -> bool {
-        self.new.is_some()
+        self.external.is_some()
     }
 }
 
@@ -113,15 +113,16 @@ impl CheckIpTrait for Params {
         };
         check_result.new = new_ips;
         check_result.old = previous_ips;
-        if check_result.is_changed() {
+        if check_result.new.is_some() {
             check_result.external = get_external_ipv6().await;
+            debug!("external ipv6 address: {:?}", &check_result.external);
         }
         Ok(check_result)
     }
 }
 
 async fn get_external_ipv6() -> Option<Ipv6Addr> {
-    let res = CLIENT.get(LOOKUP_URL).send().await.ok();
+    let res = get_http_client().await.get(LOOKUP_URL).send().await.ok();
     let ip_str = res?.text().await.ok();
     ip_str?.trim().parse().ok()
 }

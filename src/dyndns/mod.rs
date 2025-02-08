@@ -1,8 +1,13 @@
+use std::net::IpAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
-use once_cell::sync::Lazy;
+use local_ip_address::list_afinet_netifas;
 use reqwest::Client;
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::Mutex;
+use tokio::sync::OnceCell;
+use tokio::{task, time};
 
 mod api;
 mod check;
@@ -10,21 +15,69 @@ mod v4;
 mod v6;
 
 pub use crate::Error;
-use tokio::{task, time};
 
 use crate::{
     db::{DynDNS, History, IpVersion},
-    DbPool,
+    init_dbpool, DbPool,
 };
 
 use self::{api::DynDNSAPI, check::CheckResultTrait, v4::Ipv4CheckResult, v6::Ipv6CheckResult};
 
-pub static CLIENT: Lazy<Client> = Lazy::new(|| {
-    Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .unwrap()
-});
+pub struct HttpClient {
+    inner: Arc<Client>,
+    db_pool: DbPool,
+    interface: String,
+}
+
+impl HttpClient {
+    async fn new() -> Mutex<Self> {
+        let db_pool = init_dbpool();
+        let config = get_dyn_dns_config(&db_pool).await.unwrap();
+        let interface = config.interface;
+        let inner = match get_interface_address(&interface) {
+            Some(ip) => Client::builder()
+                .timeout(Duration::from_secs(5))
+                .local_address(ip)
+                .build()
+                .unwrap(),
+            None => Client::builder()
+                .timeout(Duration::from_secs(5))
+                .build()
+                .unwrap(),
+        };
+        Mutex::new(Self {
+            inner: Arc::new(inner),
+            db_pool,
+            interface,
+        })
+    }
+    pub async fn client(&mut self) -> Arc<Client> {
+        let config = get_dyn_dns_config(&self.db_pool).await.unwrap();
+        let interface = config.interface;
+        if &interface != &self.interface {
+            let inner = match get_interface_address(&interface) {
+                Some(ip) => Client::builder()
+                    .timeout(Duration::from_secs(5))
+                    .local_address(ip)
+                    .build()
+                    .unwrap(),
+                None => Client::builder()
+                    .timeout(Duration::from_secs(5))
+                    .build()
+                    .unwrap(),
+            };
+            self.inner = Arc::new(inner);
+        }
+        self.inner.clone()
+    }
+}
+
+static CLIENT: OnceCell<Mutex<HttpClient>> = OnceCell::const_new();
+
+pub async fn get_http_client() -> Arc<Client> {
+    let client = CLIENT.get_or_init(HttpClient::new).await;
+    client.lock().await.client().await
+}
 
 pub fn launch(pool: DbPool, rx: Receiver<u64>) -> task::JoinHandle<()> {
     info!("dyn_dns api start");
@@ -145,4 +198,17 @@ async fn update(
 async fn get_dyn_dns_config(pool: &DbPool) -> Result<DynDNS, Error> {
     let conn = pool.get().await?;
     Ok(DynDNS::get(&conn).await?)
+}
+
+fn get_interface_address(interface: &String) -> Option<IpAddr> {
+    let ifas = list_afinet_netifas().unwrap();
+    let mut address = None;
+    for (name, ip) in ifas {
+        if &name == interface && ip.is_ipv4() && !ip.is_loopback() {
+            debug!("{:?}", &ip);
+            address = Some(ip);
+            break;
+        }
+    }
+    address
 }
