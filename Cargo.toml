@@ -25,7 +25,6 @@ chrono = { version = "0.4", default-features = false, features = [
     "clock",
     "serde",
 ] }
-isahc = { version = "1.7", features = ["json"] }
 local-ip-address = "0.6"
 pin-project = "1"
 tracing = "0.1"
@@ -42,6 +41,16 @@ async-trait = "0.1"
 is-terminal = "0.4"
 axum-extra = "0.7"
 validator = { version = "0.16", features = ["derive"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+isahc = { version = "1.7", features = ["json", "static-ssl"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+isahc = { version = "1.7", default-features = false, features = [
+    "http2",
+    "json",
+    "text-decoding",
+] }
 
 [profile.release]
 lto = true
