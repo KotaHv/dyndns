@@ -1,9 +1,14 @@
 use std::net::Ipv4Addr;
 
 use async_trait::async_trait;
+use isahc::{
+    config::{Configurable, NetworkInterface},
+    prelude::AsyncReadResponseExt,
+    Request,
+};
 
 use super::check::{CheckIpTrait, CheckResultTrait, GetIpTrait};
-use super::{get_http_client, Error};
+use super::{Error, CLIENT};
 use crate::{
     db::{History, IpVersion},
     DbPool,
@@ -35,6 +40,7 @@ impl CheckResultTrait for Ipv4CheckResult {
 pub struct Params {
     pub pool: DbPool,
     pub enable: IpVersion,
+    pub interface: String,
 }
 
 #[async_trait]
@@ -42,7 +48,11 @@ impl GetIpTrait for Params {
     type NewIp = Ipv4Addr;
     type OldIp = Ipv4Addr;
     async fn get_new_ip(&self) -> Result<Self::NewIp, Error> {
-        let res = get_http_client().await.get(LOOKUP_URL).send().await?;
+        let req = Request::get(LOOKUP_URL)
+            .interface(NetworkInterface::name(&self.interface))
+            .body(())
+            .unwrap();
+        let mut res = CLIENT.send_async(req).await?;
         let ip_str = res.text().await?;
         Ok(ip_str
             .trim()

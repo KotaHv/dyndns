@@ -3,9 +3,15 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr},
 };
 
+use isahc::{
+    auth::{Authentication, Credentials},
+    config::Configurable,
+    prelude::AsyncReadResponseExt,
+    Request,
+};
 use serde::{Serialize, Serializer};
 
-use super::{get_http_client, Error};
+use super::{Error, CLIENT};
 
 static DYNDNS_GOOD: &'static str = "good";
 
@@ -71,14 +77,18 @@ impl DynDNSAPI {
         }
     }
     pub async fn update(&self) -> Result<bool, Error> {
-        let url = format!("https://{}/nic/update", &self.server);
-        let res = get_http_client()
-            .await
-            .get(url)
-            .basic_auth(&self.username, Some(&self.password))
-            .query(&self.params)
-            .send()
-            .await?;
+        let url = format!(
+            "https://{server}/nic/update?hostname={hostname}&myip={myip}",
+            server = self.server,
+            hostname = self.params.hostname,
+            myip = self.params.myip
+        );
+        let req = Request::get(url)
+            .authentication(Authentication::basic())
+            .credentials(Credentials::new(&self.username, &self.password))
+            .body(())
+            .unwrap();
+        let mut res = CLIENT.send_async(req).await?;
         let status = res.status();
         let text = match res.text().await {
             Ok(text) => text.trim().to_string(),

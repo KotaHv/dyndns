@@ -25,10 +25,7 @@ chrono = { version = "0.4", default-features = false, features = [
     "clock",
     "serde",
 ] }
-reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
-    "json",
-] }
+isahc = { version = "1.7", features = ["json"] }
 local-ip-address = "0.6"
 pin-project = "1"
 tracing = "0.1"

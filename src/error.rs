@@ -6,8 +6,8 @@ use axum::{
 
 use deadpool_diesel::{InteractError, PoolError};
 use diesel::result::Error as DieselError;
+use isahc::Error as rError;
 use local_ip_address::Error as LError;
-use reqwest::Error as rError;
 use serde::Serialize;
 use tokio::task::JoinError;
 
@@ -29,6 +29,10 @@ pub enum Error {
     Interface(#[from] LError),
     #[error("Failed to parse IPv4 address : {0}")]
     IPv4ParseError(String),
+    #[error("Failed to parse IPv6 address : {0}")]
+    IPv6ParseError(String),
+    #[error("{0}")]
+    IOError(#[from] std::io::Error),
 }
 
 #[derive(Serialize)]

@@ -1,6 +1,11 @@
 use std::net::{IpAddr, Ipv6Addr};
 
 use async_trait::async_trait;
+use isahc::{
+    config::{Configurable, NetworkInterface},
+    prelude::AsyncReadResponseExt,
+    Request,
+};
 use local_ip_address::list_afinet_netifas;
 use tokio::task::spawn_blocking;
 
@@ -11,7 +16,7 @@ use crate::{
 
 use super::{
     check::{CheckIpTrait, CheckResultTrait, GetIpTrait},
-    get_http_client, Error,
+    Error, CLIENT,
 };
 
 static LOOKUP_URL: &'static str = "https://api-ipv6.ip.sb/ip";
@@ -114,17 +119,24 @@ impl CheckIpTrait for Params {
         check_result.new = new_ips;
         check_result.old = previous_ips;
         if check_result.new.is_some() {
-            check_result.external = get_external_ipv6().await;
+            check_result.external = Some(get_external_ipv6(&self.interface).await?);
             debug!("external ipv6 address: {:?}", &check_result.external);
         }
         Ok(check_result)
     }
 }
 
-async fn get_external_ipv6() -> Option<Ipv6Addr> {
-    let res = get_http_client().await.get(LOOKUP_URL).send().await.ok();
-    let ip_str = res?.text().await.ok();
-    ip_str?.trim().parse().ok()
+async fn get_external_ipv6(interface: &str) -> Result<Ipv6Addr, Error> {
+    let req = Request::get(LOOKUP_URL)
+        .interface(NetworkInterface::name(interface))
+        .body(())
+        .unwrap();
+    let mut res = CLIENT.send_async(req).await?;
+    let ip_str = res.text().await?;
+    Ok(ip_str
+        .trim()
+        .parse()
+        .map_err(|_e| Error::IPv6ParseError(ip_str))?)
 }
 
 fn get_ipv6_addresses(interface: &str) -> Result<Vec<Ipv6Addr>, Error> {
