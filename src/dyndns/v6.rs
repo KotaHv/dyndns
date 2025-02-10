@@ -118,8 +118,12 @@ impl CheckIpTrait for Params {
         };
         check_result.new = new_ips;
         check_result.old = previous_ips;
-        if check_result.new.is_some() {
-            check_result.external = Some(get_external_ipv6(&self.interface).await?);
+        if let Some(new) = &check_result.new {
+            check_result.external = if new.len() == 1 {
+                Some(new[0].clone())
+            } else {
+                Some(get_external_ipv6(&self.interface).await?)
+            };
             debug!("external ipv6 address: {:?}", &check_result.external);
         }
         Ok(check_result)
