@@ -19,8 +19,8 @@ pub enum Error {
     Diesel(#[from] DieselError),
     #[error("{reason}")]
     Custom { status: StatusCode, reason: String },
-    #[error("Reqwest Error: {0}")]
-    Reqwest(#[from] rError),
+    #[error("Isahc Error: {0}")]
+    Isahc(#[from] rError),
     #[error("Tokio JoinError: {0}")]
     Join(#[from] JoinError),
     #[error("ipv6 not found")]
