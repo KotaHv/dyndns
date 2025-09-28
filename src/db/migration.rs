@@ -1,7 +1,7 @@
 use std::{error::Error, fs::create_dir_all, path::Path};
 
 use diesel::Connection;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
 use crate::CONFIG;
 

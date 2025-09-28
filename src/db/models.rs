@@ -7,21 +7,21 @@ use axum::http::Uri;
 use chrono::{NaiveDateTime, Utc};
 
 use diesel::{
+    AsExpression, FromSqlRow,
     deserialize::FromSql,
     expression::expression_types::NotSelectable,
     prelude::*,
     serialize::{IsNull, ToSql},
     sql_types::Integer,
     sqlite::{Sqlite, SqliteValue},
-    AsExpression, FromSqlRow,
 };
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 use validator::{Validate, ValidationError};
 
 use super::{
     Paginate, {dyndns, history},
 };
-use crate::{util::get_interfaces, DbConn, Error};
+use crate::{DbConn, Error, util::get_interfaces};
 
 #[repr(i32)]
 #[derive(Debug, FromSqlRow, AsExpression, Clone, Copy)]
@@ -85,16 +85,16 @@ impl<'de> Deserialize<'de> for IpVersion {
 )]
 #[diesel(table_name = dyndns)]
 pub struct DynDNS {
-    #[validate(custom = "validate_host")]
+    #[validate(custom(function = "validate_host"))]
     pub server: String,
     #[validate(length(min = 1))]
     pub username: String,
     #[validate(length(min = 1))]
     pub password: String,
-    #[validate(custom = "validate_host")]
+    #[validate(custom(function = "validate_host"))]
     pub hostname: String,
     pub ip: IpVersion,
-    #[validate(length(min = 1), custom = "validate_interface")]
+    #[validate(length(min = 1), custom(function = "validate_interface"))]
     pub interface: String,
     #[validate(range(min = 1))]
     pub sleep_interval: i32,

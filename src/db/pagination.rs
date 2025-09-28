@@ -1,9 +1,9 @@
 use diesel::{
+    QueryId, QueryResult, RunQueryDsl, SqliteConnection,
     query_builder::{AstPass, Query, QueryFragment},
     query_dsl::LoadQuery,
     sql_types::BigInt,
     sqlite::Sqlite,
-    QueryId, QueryResult, RunQueryDsl, SqliteConnection,
 };
 
 pub trait Paginate: Sized {

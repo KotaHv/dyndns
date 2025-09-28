@@ -22,7 +22,7 @@ use crate::CONFIG;
 pub fn init() {
     let is_color = CONFIG.log.style.is_color();
     if !is_color {
-        Paint::disable();
+        yansi::disable();
     }
     let format = fmt::layer().with_timer(LocalTime).with_ansi(is_color);
     let level = CONFIG.log.level.as_str();
@@ -30,8 +30,7 @@ pub fn init() {
         Ok(f) => f,
         Err(e) => {
             let err = format!("string {} did not parse successfully: {}", level, e);
-            let err = Paint::red(err).bold();
-            panic!("{}", err);
+            panic!("{}", err.red().bold());
         }
     };
 
@@ -111,16 +110,19 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let res = ready!(this.response_future.poll(cx)?);
-        let status = res.status().to_string();
-        let status = match res.status().is_success() {
-            true => Paint::yellow(status),
-            false => Paint::red(status),
+        let status = res.status();
+        let status = match status.as_u16() {
+            100..=199 => status.blue(),
+            200..=299 => status.green(),
+            300..=399 => status.cyan(),
+            400..=499 => status.yellow(),
+            _ => status.red(),
         };
         info!(
-            method = ?Paint::green(this.method),
-            path = ?Paint::blue(this.path),
+            method = ?this.method.green(),
+            path = ?this.path.blue(),
             status = ?status,
-            elapsed = ?this.start.elapsed()
+            elapsed = ?this.start.elapsed().rgb(248, 200, 220)
         );
         Poll::Ready(Ok(res))
     }

@@ -1,16 +1,16 @@
-use async_trait::async_trait;
+use std::ops::Deref;
+
 use axum::{
-    extract::{FromRequestParts, Query, State},
-    http::{request::Parts, StatusCode},
-    routing::get,
     Json, Router,
+    extract::{Query, State},
+    routing::get,
 };
 use diesel::ExpressionMethods;
 use serde::{Deserialize, Deserializer};
 
 use crate::{
-    db::{history, BoxHistoryOrder, History, HistoryIpVersion, HistoryRes},
     AppState, DbPool, Error,
+    db::{BoxHistoryOrder, History, HistoryIpVersion, HistoryRes, history},
 };
 
 pub fn routes() -> Router<AppState> {
@@ -123,39 +123,42 @@ impl<'de> Deserialize<'de> for SortOrder {
     }
 }
 
-struct SortItems(Vec<SortBy>);
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct SortItems {
+    #[serde(deserialize_with = "deserialize_sort_items")]
+    sort_items: Vec<SortBy>,
+}
 
-#[async_trait]
-impl<S> FromRequestParts<S> for SortItems
-where
-    S: Send + Sync,
-{
-    type Rejection = (StatusCode, String);
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        #[derive(Deserialize)]
-        struct A {
-            sort_items: String,
-        }
-        let results = Query::<A>::from_request_parts(parts, state).await;
-        match results {
-            Ok(Query(results)) => {
-                let results = serde_json::from_str::<Vec<SortBy>>(results.sort_items.as_str());
-                match results {
-                    Ok(sort_items) => Ok(Self(sort_items)),
-                    Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
-                }
-            }
-            Err(_) => Ok(Self(vec![SortBy::default()])),
+impl Default for SortItems {
+    fn default() -> Self {
+        SortItems {
+            sort_items: vec![SortBy::default()],
         }
     }
+}
+
+impl Deref for SortItems {
+    type Target = Vec<SortBy>;
+    fn deref(&self) -> &Self::Target {
+        &self.sort_items
+    }
+}
+
+fn deserialize_sort_items<'de, D>(deserializer: D) -> Result<Vec<SortBy>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    serde_json::from_str(&s).map_err(serde::de::Error::custom)
 }
 
 async fn history(
     State(pool): State<DbPool>,
     Query(pagination): Query<Pagination>,
-    SortItems(sort_items): SortItems,
+    Query(sort_items): Query<SortItems>,
 ) -> Result<Json<HistoryRes>, Error> {
-    let sort_items: Vec<BoxHistoryOrder> = sort_items.into_iter().map(|v| v.order()).collect();
+    let sort_items: Vec<BoxHistoryOrder> = sort_items.iter().map(|v| v.order()).collect();
     let conn = pool.get().await?;
     let (histories, total) =
         History::paginate(&conn, pagination.page, pagination.per_page, sort_items).await?;

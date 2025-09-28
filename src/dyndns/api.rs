@@ -4,14 +4,14 @@ use std::{
 };
 
 use isahc::{
+    Request,
     auth::{Authentication, Credentials},
     config::Configurable,
     prelude::AsyncReadResponseExt,
-    Request,
 };
 use serde::{Serialize, Serializer};
 
-use super::{Error, CLIENT};
+use super::{CLIENT, Error};
 
 static DYNDNS_GOOD: &'static str = "good";
 

@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use axum::{
-    routing::{get, Router},
     Json,
+    routing::{Router, get},
 };
 use local_ip_address::list_afinet_netifas;
 

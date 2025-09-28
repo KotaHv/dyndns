@@ -3,11 +3,14 @@ extern crate tracing;
 
 use std::env;
 
-use axum::{extract::FromRef, Router};
+use axum::{Router, extract::FromRef};
 
 use axum_extra::middleware::option_layer;
 use dotenvy::dotenv;
-use tokio::sync::mpsc::{self, Sender};
+use tokio::{
+    net::TcpListener,
+    sync::mpsc::{self, Sender},
+};
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -54,14 +57,19 @@ async fn main() {
         tx,
     };
     let app = Router::new()
-        .nest_service("/", ServeDir::new(&CONFIG.web_dir))
         .nest("/api", api::routes(state))
+        .fallback_service(ServeDir::new(&CONFIG.web_dir))
         .layer(layer);
 
-    let server = axum::Server::bind(&config::CONFIG.addr).serve(app.into_make_service());
-    info!("listening on http://{}", server.local_addr());
+    let listener = TcpListener::bind(config::CONFIG.addr).await.unwrap();
+    let local_addr = listener.local_addr().unwrap();
+    info!("listening on http://{}", local_addr);
     tokio::select! {
-        _ = server => {},
+        result = axum::serve(listener, app) => {
+            if let Err(err) = result {
+                error!("server error: {}", err);
+            }
+        },
         _ = dyndns::launch(pool, rx) => {}
     };
 }

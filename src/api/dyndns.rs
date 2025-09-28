@@ -1,14 +1,13 @@
-use async_trait::async_trait;
 use axum::{
-    extract::{FromRequest, State},
-    http::{Request, StatusCode},
+    Json, Router,
+    extract::{FromRequest, Request, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
-    Json, Router,
 };
 use validator::Validate;
 
-use crate::{db::DynDNS, AppState, DbPool, Error};
+use crate::{AppState, DbPool, Error, db::DynDNS};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -49,15 +48,14 @@ async fn update_dyndns(
     Ok(Json(res))
 }
 
-#[async_trait]
-impl<S, B> FromRequest<S, B> for DynDNS
+impl<S> FromRequest<S> for DynDNS
 where
-    Json<DynDNS>: FromRequest<S, B>,
-    B: Send + 'static,
+    Json<DynDNS>: FromRequest<S>,
     S: Send + Sync,
 {
     type Rejection = Response;
-    async fn from_request(req: Request<B>, state: &S) -> Result<Self, Self::Rejection> {
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         let Json(dyndns) = Json::<DynDNS>::from_request(req, state)
             .await
             .map_err(IntoResponse::into_response)?;

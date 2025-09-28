@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use isahc::{config::Configurable, HttpClient};
+use isahc::{HttpClient, config::Configurable};
 use once_cell::sync::Lazy;
 use tokio::sync::mpsc::Receiver;
 use tokio::{task, time};
@@ -13,8 +13,8 @@ mod v6;
 pub use crate::Error;
 
 use crate::{
-    db::{DynDNS, History, IpVersion},
     DbPool,
+    db::{DynDNS, History, IpVersion},
 };
 
 use self::{api::DynDNSAPI, check::CheckResultTrait, v4::Ipv4CheckResult, v6::Ipv6CheckResult};

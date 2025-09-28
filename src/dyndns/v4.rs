@@ -1,17 +1,16 @@
 use std::net::Ipv4Addr;
 
-use async_trait::async_trait;
 use isahc::{
+    Request,
     config::{Configurable, NetworkInterface},
     prelude::AsyncReadResponseExt,
-    Request,
 };
 
 use super::check::{CheckIpTrait, CheckResultTrait, GetIpTrait};
-use super::{Error, CLIENT};
+use super::{CLIENT, Error};
 use crate::{
-    db::{History, IpVersion},
     DbPool,
+    db::{History, IpVersion},
 };
 
 static LOOKUP_URL: &'static str = "https://api-ipv4.ip.sb/ip";
@@ -43,7 +42,6 @@ pub struct Params {
     pub interface: String,
 }
 
-#[async_trait]
 impl GetIpTrait for Params {
     type NewIp = Ipv4Addr;
     type OldIp = Ipv4Addr;
@@ -69,7 +67,6 @@ impl GetIpTrait for Params {
     }
 }
 
-#[async_trait]
 impl CheckIpTrait for Params {
     type ResultType = Ipv4CheckResult;
     async fn check_result(&self) -> Result<Ipv4CheckResult, Error> {

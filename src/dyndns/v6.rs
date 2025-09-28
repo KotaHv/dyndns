@@ -1,22 +1,21 @@
 use std::net::{IpAddr, Ipv6Addr};
 
-use async_trait::async_trait;
 use isahc::{
+    Request,
     config::{Configurable, NetworkInterface},
     prelude::AsyncReadResponseExt,
-    Request,
 };
 use local_ip_address::list_afinet_netifas;
 use tokio::task::spawn_blocking;
 
 use crate::{
-    db::{History, IpVersion},
     DbPool,
+    db::{History, IpVersion},
 };
 
 use super::{
+    CLIENT, Error,
     check::{CheckIpTrait, CheckResultTrait, GetIpTrait},
-    Error, CLIENT,
 };
 
 static LOOKUP_URL: &'static str = "https://api-ipv6.ip.sb/ip";
@@ -55,7 +54,6 @@ pub struct Params {
     pub interface: String,
 }
 
-#[async_trait]
 impl GetIpTrait for Params {
     type NewIp = Vec<Ipv6Addr>;
     type OldIp = (Option<Vec<Ipv6Addr>>, Vec<Ipv6Addr>);
@@ -76,7 +74,6 @@ impl GetIpTrait for Params {
     }
 }
 
-#[async_trait]
 impl CheckIpTrait for Params {
     type ResultType = Ipv6CheckResult;
     async fn check_result(&self) -> Result<Ipv6CheckResult, Error> {

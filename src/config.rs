@@ -1,6 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use figment::{providers::Env, Figment};
+use figment::{Figment, providers::Env};
 use is_terminal::IsTerminal;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
