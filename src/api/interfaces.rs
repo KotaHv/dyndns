@@ -6,9 +6,9 @@ use axum::{
 };
 use local_ip_address::list_afinet_netifas;
 
-use crate::Error;
+use crate::{AppState, Error};
 
-pub fn routes() -> Router {
+pub fn routes() -> Router<AppState> {
     Router::new().route("/", get(get_interfaces))
 }
 

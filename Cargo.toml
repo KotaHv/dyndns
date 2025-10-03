@@ -6,7 +6,8 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = { version = "0.8.4", features = ["macros"] }
+axum = { version = "0.8.6", features = ["macros"] }
+axum-extra = "0.10.3"
 tokio = { version = "1.47.1", features = ["full"] }
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.6", features = ["full"] }
@@ -38,8 +39,9 @@ figment = { version = "0.10.19", features = ["env"] }
 yansi = "1.0.1"
 thiserror = "2.0.16"
 is-terminal = "0.4.16"
-axum-extra = "0.10.1"
 validator = { version = "0.20.0", features = ["derive"] }
+jsonwebtoken = { version = "10.0.0", features = ["rust_crypto"] }
+argon2 = "0.5.3"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 isahc = { version = "1.7.2", features = ["json", "static-ssl"] }

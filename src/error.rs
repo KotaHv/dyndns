@@ -59,6 +59,15 @@ impl IntoResponse for Error {
     }
 }
 
+impl Error {
+    pub fn unauthorized(reason: impl Into<String>) -> Self {
+        Self::Custom {
+            status: StatusCode::UNAUTHORIZED,
+            reason: reason.into(),
+        }
+    }
+}
+
 impl<E> From<E> for Error
 where
     E: Into<DeadPoolError>,

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
-use std::env;
+use std::{env, sync::Arc};
 
 use axum::{Router, extract::FromRef};
 
@@ -18,6 +18,7 @@ use tower_http::{
 };
 
 mod api;
+mod auth;
 mod config;
 mod db;
 mod dyndns;
@@ -38,6 +39,8 @@ async fn main() {
     trace::init();
     db::run_migrations().unwrap();
     let pool = init_dbpool();
+    let auth = auth::AuthManager::new(&CONFIG.auth).unwrap_or_else(|err| panic!("{}", err));
+    let auth = Arc::new(auth);
 
     let cors = if CONFIG.debug {
         Some(
@@ -55,11 +58,13 @@ async fn main() {
     let state = AppState {
         pool: pool.clone(),
         tx,
+        auth,
     };
     let app = Router::new()
-        .nest("/api", api::routes(state))
+        .nest("/api", api::routes(&state))
         .fallback_service(ServeDir::new(&CONFIG.web_dir))
-        .layer(layer);
+        .layer(layer)
+        .with_state(state);
 
     let listener = TcpListener::bind(config::CONFIG.addr).await.unwrap();
     let local_addr = listener.local_addr().unwrap();
@@ -78,6 +83,7 @@ async fn main() {
 pub struct AppState {
     pub pool: DbPool,
     pub tx: Sender<u64>,
+    pub auth: Arc<auth::AuthManager>,
 }
 
 fn init_dbpool() -> DbPool {

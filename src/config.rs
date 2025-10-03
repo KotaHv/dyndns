@@ -1,4 +1,7 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{
+    fmt,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
 
 use figment::{Figment, providers::Env};
 use is_terminal::IsTerminal;
@@ -72,6 +75,46 @@ impl Log {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct Auth {
+    pub username: String,
+    pub password: String,
+    pub token_ttl_seconds: u64,
+}
+
+impl Default for Auth {
+    fn default() -> Self {
+        Self {
+            username: String::new(),
+            password: String::new(),
+            token_ttl_seconds: 3600,
+        }
+    }
+}
+
+impl Auth {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.username.trim().is_empty() {
+            return Err("authentication username must be set".into());
+        }
+        if self.password.len() < 8 {
+            return Err("authentication password must be at least 8 characters".into());
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Auth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Auth")
+            .field("username", &self.username)
+            .field("password_set", &!self.password.is_empty())
+            .field("token_ttl_seconds", &self.token_ttl_seconds)
+            .finish()
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 pub struct Config {
@@ -80,6 +123,7 @@ pub struct Config {
     pub database_url: String,
     pub web_dir: String,
     pub debug: bool,
+    pub auth: Auth,
 }
 
 impl Default for Config {
@@ -90,6 +134,7 @@ impl Default for Config {
             database_url: Self::database_url(),
             web_dir: Self::web_dir(),
             debug: true,
+            auth: Auth::default(),
         }
     }
 }
@@ -113,6 +158,9 @@ pub fn init_config() -> Config {
         .extract::<Config>();
     match config {
         Ok(config) => {
+            if let Err(err) = config.auth.validate() {
+                panic!("{}", err);
+            }
             println!("{:#?}", config);
             config
         }
