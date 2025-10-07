@@ -76,12 +76,15 @@ impl AuthManager {
 
     pub fn authenticate(&self, username: &str, password: &str) -> Result<AuthToken, Error> {
         if username != self.username {
-            return Err(Error::unauthorized("invalid credentials"));
+            return Err(Error::unauthorized(
+                "invalid credentials",
+                "invalid_credentials",
+            ));
         }
         let parsed_hash = self.password_hash.password_hash();
         Argon2::default()
             .verify_password(password.as_bytes(), &parsed_hash)
-            .map_err(|_| Error::unauthorized("invalid credentials"))?;
+            .map_err(|_| Error::unauthorized("invalid credentials", "invalid_credentials"))?;
 
         let now = Utc::now();
         let expires_at = now + self.token_ttl;
@@ -95,6 +98,7 @@ impl AuthManager {
             Error::Custom {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 reason: format!("failed to encode auth token: {err}"),
+                code: Some("token_encoding_failed"),
             }
         })?;
         Ok(AuthToken { token, expires_at })
@@ -104,8 +108,10 @@ impl AuthManager {
         let validation = Validation::new(Algorithm::HS256);
         let token_data = jsonwebtoken::decode::<Claims>(token, &self.decoding_key, &validation)
             .map_err(|err| match err.kind() {
-                ErrorKind::ExpiredSignature => Error::unauthorized("token expired"),
-                _ => Error::unauthorized("invalid token"),
+                ErrorKind::ExpiredSignature => {
+                    Error::unauthorized("token expired", "token_expired")
+                }
+                _ => Error::unauthorized("invalid token", "invalid_token"),
             })?;
         Ok(token_data.claims)
     }
@@ -157,11 +163,17 @@ where
             Some(value) => match value.to_str() {
                 Ok(value) => value.trim(),
                 Err(_) => {
-                    return AuthFuture::unauthorized_msg("invalid Authorization header");
+                    return AuthFuture::unauthorized_msg(
+                        "invalid Authorization header",
+                        "invalid_authorization_header",
+                    );
                 }
             },
             None => {
-                return AuthFuture::unauthorized_msg("missing Authorization header");
+                return AuthFuture::unauthorized_msg(
+                    "missing Authorization header",
+                    "missing_authorization_header",
+                );
             }
         };
         let Some(token) = authorization
@@ -169,7 +181,10 @@ where
             .map(str::trim)
             .filter(|value| !value.is_empty())
         else {
-            return AuthFuture::unauthorized_msg("invalid Authorization header");
+            return AuthFuture::unauthorized_msg(
+                "invalid Authorization header",
+                "invalid_authorization_header",
+            );
         };
         match self.auth.verify_token(token) {
             Ok(_) => AuthFuture::authorized(self.inner.call(req)),
@@ -187,8 +202,8 @@ pub enum AuthFuture<F> {
 }
 
 impl<F> AuthFuture<F> {
-    fn unauthorized_msg(message: &'static str) -> Self {
-        Self::Unauthorized(Some(Error::unauthorized(message).into_response()))
+    fn unauthorized_msg(message: &'static str, code: &'static str) -> Self {
+        Self::Unauthorized(Some(Error::unauthorized(message, code).into_response()))
     }
 
     fn unauthorized_error(error: Error) -> Self {

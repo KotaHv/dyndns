@@ -63,6 +63,7 @@ where
             return Err(Error::Custom {
                 status: StatusCode::BAD_REQUEST,
                 reason: e.to_string(),
+                code: Some("validation_failed"),
             }
             .into_response());
         }
