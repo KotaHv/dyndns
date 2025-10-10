@@ -18,7 +18,7 @@ use diesel::{
 use serde::{Deserialize, Serialize, de};
 use validator::{Validate, ValidationError};
 
-use super::{Paginate, dyndns, history, refresh_tokens};
+use super::{Paginate, auth_secrets, dyndns, history, refresh_tokens};
 use crate::{DbConn, Error, util::get_interfaces};
 
 #[repr(i32)]
@@ -416,6 +416,37 @@ impl RefreshTokenRecord {
     pub async fn delete_expired(conn: &DbConn, now: NaiveDateTime) -> Result<(), Error> {
         conn.interact(move |conn| {
             diesel::delete(refresh_tokens::table.filter(refresh_tokens::expires_at.le(now)))
+                .execute(conn)
+        })
+        .await??;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Queryable, Selectable, Insertable)]
+#[diesel(table_name = auth_secrets)]
+pub struct AuthSecretRecord {
+    pub id: i32,
+    pub secret: String,
+    pub created_at: NaiveDateTime,
+}
+
+impl AuthSecretRecord {
+    pub async fn get(conn: &DbConn) -> Result<Option<Self>, Error> {
+        conn.interact(|conn| {
+            auth_secrets::table
+                .select(AuthSecretRecord::as_select())
+                .first(conn)
+                .optional()
+        })
+        .await?
+        .map_err(|e| e.into())
+    }
+
+    pub async fn insert(conn: &DbConn, secret: AuthSecretRecord) -> Result<(), Error> {
+        conn.interact(|conn| {
+            diesel::insert_into(auth_secrets::table)
+                .values(secret)
                 .execute(conn)
         })
         .await??;

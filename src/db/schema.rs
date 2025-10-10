@@ -32,4 +32,12 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(dyndns, history, refresh_tokens,);
+diesel::table! {
+    auth_secrets (id) {
+        id -> Integer,
+        secret -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(dyndns, history, refresh_tokens, auth_secrets,);

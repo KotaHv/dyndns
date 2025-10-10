@@ -26,7 +26,11 @@ use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use tower::{Layer, Service};
 
-use crate::{DbPool, Error, config::Auth as AuthConfig, db::RefreshTokenRecord};
+use crate::{
+    DbPool, Error,
+    config::Auth as AuthConfig,
+    db::{AuthSecretRecord, RefreshTokenRecord},
+};
 
 pub struct AuthManager {
     username: String,
@@ -59,11 +63,10 @@ struct RefreshTokenPayload {
 }
 
 impl AuthManager {
-    pub fn new(config: &AuthConfig, pool: DbPool) -> Result<Self, String> {
-        let mut secret = [0u8; 32];
-        OsRng.fill_bytes(&mut secret);
-        let encoding_key = EncodingKey::from_secret(&secret);
-        let decoding_key = DecodingKey::from_secret(&secret);
+    pub async fn new(config: &AuthConfig, pool: DbPool) -> Result<Self, String> {
+        let secret = Self::load_or_init_secret(&pool).await?;
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(secret.as_bytes());
         let token_ttl = Duration::from_std(StdDuration::from_secs(config.token_ttl_seconds))
             .map_err(|err| format!("invalid authentication token ttl: {err}"))?;
         let refresh_token_ttl =
@@ -267,6 +270,36 @@ impl AuthManager {
                 "invalid_refresh_token",
             )),
         }
+    }
+
+    async fn load_or_init_secret(pool: &DbPool) -> Result<String, String> {
+        let conn = pool.get().await.map_err(|err| err.to_string())?;
+
+        if let Some(existing) = AuthSecretRecord::get(&conn)
+            .await
+            .map_err(|err| err.to_string())?
+        {
+            return Ok(existing.secret);
+        }
+
+        let secret = Self::generate_jwt_secret();
+        let record = AuthSecretRecord {
+            id: 1,
+            secret: secret.clone(),
+            created_at: Utc::now().naive_utc(),
+        };
+
+        AuthSecretRecord::insert(&conn, record)
+            .await
+            .map_err(|err| err.to_string())?;
+
+        Ok(secret)
+    }
+
+    fn generate_jwt_secret() -> String {
+        let mut bytes = [0u8; 64];
+        OsRng.fill_bytes(&mut bytes);
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
     }
 }
 
