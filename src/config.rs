@@ -81,6 +81,7 @@ pub struct Auth {
     pub username: String,
     pub password: String,
     pub token_ttl_seconds: u64,
+    pub refresh_token_ttl_seconds: u64,
 }
 
 impl Default for Auth {
@@ -89,6 +90,7 @@ impl Default for Auth {
             username: String::new(),
             password: String::new(),
             token_ttl_seconds: 3600,
+            refresh_token_ttl_seconds: 86_400,
         }
     }
 }
@@ -101,6 +103,17 @@ impl Auth {
         if self.password.len() < 8 {
             return Err("authentication password must be at least 8 characters".into());
         }
+        if self.token_ttl_seconds == 0 {
+            return Err("authentication token ttl must be greater than zero".into());
+        }
+        if self.refresh_token_ttl_seconds == 0 {
+            return Err("authentication refresh token ttl must be greater than zero".into());
+        }
+        if self.refresh_token_ttl_seconds <= self.token_ttl_seconds {
+            return Err(
+                "authentication refresh token ttl must be greater than access token ttl".into(),
+            );
+        }
         Ok(())
     }
 }
@@ -111,6 +124,7 @@ impl fmt::Debug for Auth {
             .field("username", &self.username)
             .field("password_set", &!self.password.is_empty())
             .field("token_ttl_seconds", &self.token_ttl_seconds)
+            .field("refresh_token_ttl_seconds", &self.refresh_token_ttl_seconds)
             .finish()
     }
 }

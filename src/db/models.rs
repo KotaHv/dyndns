@@ -18,9 +18,7 @@ use diesel::{
 use serde::{Deserialize, Serialize, de};
 use validator::{Validate, ValidationError};
 
-use super::{
-    Paginate, {dyndns, history},
-};
+use super::{Paginate, dyndns, history, refresh_tokens};
 use crate::{DbConn, Error, util::get_interfaces};
 
 #[repr(i32)]
@@ -369,5 +367,58 @@ pub struct HistoryRes {
 impl HistoryRes {
     pub fn new(total: i64, histories: Vec<History>) -> Self {
         Self { total, histories }
+    }
+}
+
+#[derive(Debug, Queryable, Selectable, Insertable)]
+#[diesel(table_name = refresh_tokens)]
+pub struct RefreshTokenRecord {
+    pub selector: String,
+    pub verifier_hash: String,
+    pub expires_at: NaiveDateTime,
+    pub created_at: NaiveDateTime,
+}
+
+impl RefreshTokenRecord {
+    pub async fn insert(conn: &DbConn, token: RefreshTokenRecord) -> Result<(), Error> {
+        conn.interact(|conn| {
+            diesel::insert_into(refresh_tokens::table)
+                .values(token)
+                .execute(conn)
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub async fn delete(conn: &DbConn, selector: &str) -> Result<(), Error> {
+        let selector = selector.to_owned();
+        conn.interact(move |conn| {
+            diesel::delete(refresh_tokens::table.filter(refresh_tokens::selector.eq(selector)))
+                .execute(conn)
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub async fn find(conn: &DbConn, selector: &str) -> Result<Option<RefreshTokenRecord>, Error> {
+        let selector = selector.to_owned();
+        conn.interact(move |conn| {
+            refresh_tokens::table
+                .filter(refresh_tokens::selector.eq(selector))
+                .select(RefreshTokenRecord::as_select())
+                .first(conn)
+                .optional()
+        })
+        .await?
+        .map_err(|e| e.into())
+    }
+
+    pub async fn delete_expired(conn: &DbConn, now: NaiveDateTime) -> Result<(), Error> {
+        conn.interact(move |conn| {
+            diesel::delete(refresh_tokens::table.filter(refresh_tokens::expires_at.le(now)))
+                .execute(conn)
+        })
+        .await??;
+        Ok(())
     }
 }

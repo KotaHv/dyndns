@@ -23,4 +23,13 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(dyndns, history,);
+diesel::table! {
+    refresh_tokens (selector) {
+        selector -> Text,
+        verifier_hash -> Text,
+        expires_at -> Timestamp,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(dyndns, history, refresh_tokens,);

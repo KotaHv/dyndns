@@ -716,6 +716,7 @@ dependencies = [
  "argon2",
  "axum",
  "axum-extra",
+ "base64",
  "chrono",
  "deadpool-diesel",
  "diesel",

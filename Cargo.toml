@@ -42,6 +42,7 @@ is-terminal = "0.4.16"
 validator = { version = "0.20.0", features = ["derive"] }
 jsonwebtoken = { version = "10.0.0", features = ["rust_crypto"] }
 argon2 = "0.5.3"
+base64 = "0.22"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 isahc = { version = "1.7.2", features = ["json", "static-ssl"] }

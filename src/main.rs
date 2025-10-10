@@ -39,7 +39,8 @@ async fn main() {
     trace::init();
     db::run_migrations().unwrap();
     let pool = init_dbpool();
-    let auth = auth::AuthManager::new(&CONFIG.auth).unwrap_or_else(|err| panic!("{}", err));
+    let auth =
+        auth::AuthManager::new(&CONFIG.auth, pool.clone()).unwrap_or_else(|err| panic!("{}", err));
     let auth = Arc::new(auth);
 
     let cors = if CONFIG.debug {
