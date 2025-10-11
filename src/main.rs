@@ -23,6 +23,7 @@ mod config;
 mod db;
 mod dyndns;
 mod error;
+mod middleware;
 mod trace;
 mod util;
 
@@ -55,7 +56,9 @@ async fn main() {
         None
     };
     let cors = option_layer(cors);
-    let layer = ServiceBuilder::new().layer(trace::TraceLayer).layer(cors);
+    let layer = ServiceBuilder::new()
+        .layer(middleware::trace::TraceLayer)
+        .layer(cors);
     let (tx, rx) = mpsc::channel::<u64>(1);
     let state = AppState {
         pool: pool.clone(),

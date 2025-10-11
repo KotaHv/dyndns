@@ -1,8 +1,7 @@
 use axum::Router;
 use axum::http::StatusCode;
 
-use crate::AppState;
-use crate::auth::AuthLayer;
+use crate::{AppState, middleware::auth::AuthLayer};
 
 mod auth;
 mod dyndns;
