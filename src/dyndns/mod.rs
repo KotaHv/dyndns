@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use isahc::{HttpClient, config::Configurable};
 use once_cell::sync::Lazy;
-use tokio::sync::{mpsc::Receiver, watch};
+use tokio::sync::watch;
 use tokio::time;
 
 mod api;
@@ -30,26 +30,34 @@ pub static CLIENT: Lazy<HttpClient> = Lazy::new(|| {
         .unwrap()
 });
 
-pub async fn launch(pool: DbPool, rx: Receiver<u64>, shutdown: watch::Receiver<bool>) {
+pub async fn launch(
+    pool: DbPool,
+    interval_rx: watch::Receiver<u64>,
+    shutdown: watch::Receiver<bool>,
+) {
     info!("DynDNS API start");
-    let worker = DynDnsWorker::new(pool, rx, shutdown).await;
+    let worker = DynDnsWorker::new(pool, interval_rx, shutdown).await;
     worker.run().await;
     info!("DynDNS API stop");
 }
 
 struct DynDnsWorker {
     pool: DbPool,
-    rx: Receiver<u64>,
+    interval_rx: watch::Receiver<u64>,
     interval_secs: u64,
     shutdown: watch::Receiver<bool>,
 }
 
 impl DynDnsWorker {
-    async fn new(pool: DbPool, rx: Receiver<u64>, shutdown: watch::Receiver<bool>) -> Self {
+    async fn new(
+        pool: DbPool,
+        interval_rx: watch::Receiver<u64>,
+        shutdown: watch::Receiver<bool>,
+    ) -> Self {
         let interval_secs = Self::load_sleep_interval(&pool).await;
         Self {
             pool,
-            rx,
+            interval_rx,
             interval_secs,
             shutdown,
         }
@@ -81,8 +89,9 @@ impl DynDnsWorker {
                 _ = interval.tick() => {
                     return;
                 },
-                Some(v) = self.rx.recv() => {
-                    self.interval_secs = v;
+                Ok(_) = self.interval_rx.changed() => {
+                    self.interval_secs = *self.interval_rx.borrow();
+                    debug!("new interval {}s", self.interval_secs);
                     interval = time::interval_at(
                         start_time,
                         Duration::from_secs(self.interval_secs),

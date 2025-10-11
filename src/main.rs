@@ -7,14 +7,7 @@ use axum::{Router, extract::FromRef};
 
 use axum_extra::middleware::option_layer;
 use dotenvy::dotenv;
-use tokio::{
-    net::TcpListener,
-    signal,
-    sync::{
-        mpsc::{self, Sender},
-        watch,
-    },
-};
+use tokio::{net::TcpListener, signal, sync::watch};
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -63,11 +56,11 @@ async fn main() {
     let layer = ServiceBuilder::new()
         .layer(middleware::trace::TraceLayer)
         .layer(cors);
-    let (tx, rx) = mpsc::channel::<u64>(1);
+    let (interval_tx, interval_rx) = watch::channel(0u64);
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let state = AppState {
         pool: pool.clone(),
-        tx,
+        interval_tx,
         auth,
     };
     let app = Router::new()
@@ -79,7 +72,7 @@ async fn main() {
     let listener = TcpListener::bind(config::CONFIG.addr).await.unwrap();
     let local_addr = listener.local_addr().unwrap();
     info!("listening on http://{}", local_addr);
-    let worker = tokio::spawn(dyndns::launch(pool, rx, shutdown_rx.clone()));
+    let worker = tokio::spawn(dyndns::launch(pool, interval_rx, shutdown_rx.clone()));
     if let Err(err) = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
@@ -100,7 +93,7 @@ async fn main() {
 #[derive(FromRef, Clone)]
 pub struct AppState {
     pub pool: DbPool,
-    pub tx: Sender<u64>,
+    pub interval_tx: watch::Sender<u64>,
     pub auth: Arc<auth::AuthManager>,
 }
 
