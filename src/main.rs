@@ -9,7 +9,11 @@ use axum_extra::middleware::option_layer;
 use dotenvy::dotenv;
 use tokio::{
     net::TcpListener,
-    sync::mpsc::{self, Sender},
+    signal,
+    sync::{
+        mpsc::{self, Sender},
+        watch,
+    },
 };
 use tower::ServiceBuilder;
 use tower_http::{
@@ -60,6 +64,7 @@ async fn main() {
         .layer(middleware::trace::TraceLayer)
         .layer(cors);
     let (tx, rx) = mpsc::channel::<u64>(1);
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let state = AppState {
         pool: pool.clone(),
         tx,
@@ -74,14 +79,22 @@ async fn main() {
     let listener = TcpListener::bind(config::CONFIG.addr).await.unwrap();
     let local_addr = listener.local_addr().unwrap();
     info!("listening on http://{}", local_addr);
-    tokio::select! {
-        result = axum::serve(listener, app) => {
-            if let Err(err) = result {
-                error!("server error: {}", err);
-            }
-        },
-        _ = dyndns::launch(pool, rx) => {}
-    };
+    let worker = tokio::spawn(dyndns::launch(pool, rx, shutdown_rx.clone()));
+    if let Err(err) = axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+    {
+        error!("server error: {}", err);
+    }
+    info!("axum server stopped");
+    debug!("notifying DynDNS worker to shutdown");
+    if shutdown_tx.send(true).is_err() {
+        warn!("failed to notify DynDNS worker, channel already closed");
+    }
+    if let Err(err) = worker.await {
+        error!("failed to join DynDNS worker: {}", err);
+    }
+    info!("shutdown complete");
 }
 
 #[derive(FromRef, Clone)]
@@ -108,4 +121,29 @@ fn launch_info() {
         env!("CARGO_PKG_VERSION")
     );
     println!();
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    info!("received shutdown signal, initiating graceful shutdown");
 }
