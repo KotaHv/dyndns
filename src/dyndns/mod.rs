@@ -3,7 +3,7 @@ use std::time::Duration;
 use isahc::{HttpClient, config::Configurable};
 use once_cell::sync::Lazy;
 use tokio::sync::mpsc::Receiver;
-use tokio::{task, time};
+use tokio::time;
 
 mod api;
 mod check;
@@ -30,57 +30,73 @@ pub static CLIENT: Lazy<HttpClient> = Lazy::new(|| {
         .unwrap()
 });
 
-pub fn launch(pool: DbPool, rx: Receiver<u64>) -> task::JoinHandle<()> {
+pub async fn launch(pool: DbPool, rx: Receiver<u64>) {
     info!("dyn_dns api start");
-    tokio::spawn(check_loop(pool, rx))
+    let worker = DynDnsWorker::new(pool, rx).await;
+    worker.run().await;
 }
 
-async fn check_loop(pool: DbPool, rx: Receiver<u64>) {
-    let mut rx = rx;
-    loop {
-        if let Err(e) = check(&pool).await {
-            error!("{}", e);
+struct DynDnsWorker {
+    pool: DbPool,
+    rx: Receiver<u64>,
+    interval_secs: u64,
+}
+
+impl DynDnsWorker {
+    async fn new(pool: DbPool, rx: Receiver<u64>) -> Self {
+        let interval_secs = Self::load_sleep_interval(&pool).await;
+        Self {
+            pool,
+            rx,
+            interval_secs,
         }
-        let secs = match pool.get().await {
-            Ok(conn) => match DynDNS::get_sleep_interval(&conn).await {
-                Ok(v) => Ok(v as u64),
-                Err(e) => Err(e.into()),
-            },
-            Err(e) => Err(e.into()),
-        }
-        .unwrap_or_else(|e: Error| {
-            error!("{}", e);
-            10
-        });
-        listen_interval(&mut rx, secs).await;
-        debug!("wake");
     }
-}
 
-async fn listen_interval(rx: &mut Receiver<u64>, secs: u64) {
-    debug!("sleep {}s", secs);
-    let mut interval = time::interval(time::Duration::from_secs(secs));
-    let instant = interval.tick().await;
-    loop {
-        tokio::select! {
-            _ = async {
-                interval.tick().await;
-            } => {
-                return;
-            },
-            v = async  {
-                if let Some(v) = rx.recv().await {
-                    return Some(v);
-                }
-                None
-            } => {
-                if let Some(v) = v {
-                    debug!("new iterval {}s", v);
-                    interval = time::interval_at(instant, time::Duration::from_secs(v));
-                    interval.tick().await;
-                }
+    async fn run(mut self) {
+        loop {
+            let mut interval = time::interval(time::Duration::from_secs(self.interval_secs));
+            let start_time = interval.tick().await;
+            if let Err(e) = check(&self.pool).await {
+                error!("{}", e);
             }
-        };
+            debug!("sleep {}s", self.interval_secs);
+            self.wait(start_time, interval).await;
+            debug!("wake");
+        }
+    }
+
+    async fn wait(&mut self, start_time: time::Instant, mut interval: time::Interval) {
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    return;
+                },
+                Some(v) = self.rx.recv() => {
+                    self.interval_secs = v;
+                    interval = time::interval_at(
+                        start_time,
+                        Duration::from_secs(self.interval_secs),
+                    );
+                    interval.tick().await;
+                },
+            }
+        }
+    }
+
+    async fn load_sleep_interval(pool: &DbPool) -> u64 {
+        match pool.get().await {
+            Ok(conn) => match DynDNS::get_sleep_interval(&conn).await {
+                Ok(v) => v as u64,
+                Err(e) => {
+                    error!("{}", e);
+                    10
+                }
+            },
+            Err(e) => {
+                error!("{}", e);
+                10
+            }
+        }
     }
 }
 
