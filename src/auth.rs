@@ -208,7 +208,8 @@ impl AuthManager {
     }
 
     pub fn verify_token(&self, token: &str) -> Result<Claims, Error> {
-        let validation = Validation::new(Algorithm::HS256);
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.leeway = 0;
         let token_data = jsonwebtoken::decode::<Claims>(token, &self.decoding_key, &validation)
             .map_err(|err| match err.kind() {
                 ErrorKind::ExpiredSignature => {
