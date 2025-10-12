@@ -8,7 +8,6 @@ use axum::{Router, extract::FromRef};
 use axum_extra::middleware::option_layer;
 use dotenvy::dotenv;
 use tokio::{net::TcpListener, signal, sync::watch};
-use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
     services::ServeDir,
@@ -53,9 +52,6 @@ async fn main() {
         None
     };
     let cors = option_layer(cors);
-    let layer = ServiceBuilder::new()
-        .layer(middleware::trace::TraceLayer)
-        .layer(cors);
     let (interval_tx, interval_rx) = watch::channel(0u64);
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let state = AppState {
@@ -66,7 +62,8 @@ async fn main() {
     let app = Router::new()
         .nest("/api", api::routes(&state))
         .fallback_service(ServeDir::new(&CONFIG.web_dir))
-        .layer(layer)
+        .layer(middleware::trace::TraceLayer)
+        .layer(cors)
         .with_state(state);
 
     let listener = TcpListener::bind(config::CONFIG.addr).await.unwrap();

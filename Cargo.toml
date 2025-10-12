@@ -9,8 +9,8 @@ edition = "2024"
 axum = { version = "0.8.6", features = ["macros"] }
 axum-extra = "0.10.3"
 tokio = { version = "1.47.1", features = ["full"] }
-tower = { version = "0.5.2", features = ["full"] }
-tower-http = { version = "0.6.6", features = ["full"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["cors", "fs"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 dotenvy = "0.15.7"
