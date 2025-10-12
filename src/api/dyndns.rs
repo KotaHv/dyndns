@@ -40,9 +40,9 @@ async fn update_dyndns(
     dyndns: DynDNS,
 ) -> Result<Json<DynDNS>, Error> {
     let conn = state.pool.get().await?;
-    let interval = dyndns.sleep_interval;
+    let interval = dyndns.sleep_interval.get();
     let res = DynDNS::update(&conn, dyndns).await?;
-    state.interval_tx.send_replace(interval as u64);
+    state.interval_tx.send_replace(interval);
     Ok(Json(res))
 }
 

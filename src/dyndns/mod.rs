@@ -105,7 +105,7 @@ impl DynDnsWorker {
     async fn load_sleep_interval(pool: &DbPool) -> u64 {
         match pool.get().await {
             Ok(conn) => match DynDNS::get_sleep_interval(&conn).await {
-                Ok(v) => v as u64,
+                Ok(v) => v.into(),
                 Err(e) => {
                     error!("{}", e);
                     10

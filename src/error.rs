@@ -31,6 +31,8 @@ pub enum Error {
     Ipv6NotFound,
     #[error("{0}")]
     Interface(#[from] LError),
+    #[error("{0}")]
+    SleepInterval(#[from] SleepIntervalError),
     #[error("Failed to parse IPv4 address : {0}")]
     IPv4ParseError(String),
     #[error("Failed to parse IPv6 address : {0}")]
@@ -75,6 +77,7 @@ impl Error {
     fn status_code(&self) -> StatusCode {
         match self {
             Error::Diesel(DieselError::NotFound) => StatusCode::NOT_FOUND,
+            Error::SleepInterval(_) => StatusCode::BAD_REQUEST,
             Error::Custom { status, .. } => *status,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -90,6 +93,7 @@ impl Error {
             Error::Join(_) => Some("internal_error"),
             Error::Ipv6NotFound => Some("ipv6_not_found"),
             Error::Interface(_) => Some("interface_error"),
+            Error::SleepInterval(_) => Some("invalid_sleep_interval"),
             Error::IPv4ParseError(_) => Some("ipv4_parse_error"),
             Error::IPv6ParseError(_) => Some("ipv6_parse_error"),
             Error::IOError(_) => Some("io_error"),
@@ -104,6 +108,14 @@ where
     fn from(e: E) -> Self {
         Self::DeadPool(e.into())
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SleepIntervalError {
+    #[error("sleep_interval must be greater than zero")]
+    NonPositive,
+    #[error("sleep_interval exceeds supported range")]
+    Overflow,
 }
 
 #[derive(Debug, thiserror::Error)]

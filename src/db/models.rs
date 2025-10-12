@@ -11,15 +11,15 @@ use diesel::{
     deserialize::FromSql,
     expression::expression_types::NotSelectable,
     prelude::*,
-    serialize::{IsNull, ToSql},
-    sql_types::Integer,
+    serialize::{IsNull, Output, ToSql},
+    sql_types::{BigInt, Integer},
     sqlite::{Sqlite, SqliteValue},
 };
-use serde::{Deserialize, Serialize, de};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use validator::{Validate, ValidationError};
 
 use super::{Paginate, auth_secrets, dyndns, history, refresh_tokens};
-use crate::{DbConn, Error, util::get_interfaces};
+use crate::{DbConn, Error, error::SleepIntervalError, util::get_interfaces};
 
 #[repr(i32)]
 #[derive(Debug, FromSqlRow, AsExpression, Clone, Copy)]
@@ -54,16 +54,94 @@ impl FromSql<Integer, diesel::sqlite::Sqlite> for IpVersion {
 impl Serialize for IpVersion {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         serializer.serialize_i32(*self as i32)
+    }
+}
+
+#[derive(Debug, Clone, Copy, FromSqlRow, AsExpression)]
+#[diesel(sql_type = BigInt)]
+pub struct SleepInterval(u64);
+
+impl SleepInterval {
+    pub fn new(value: u64) -> Result<Self, SleepIntervalError> {
+        if value == 0 {
+            return Err(SleepIntervalError::NonPositive);
+        }
+        Ok(Self(value))
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+
+    fn as_i64(self) -> Result<i64, SleepIntervalError> {
+        i64::try_from(self.0).map_err(|_| SleepIntervalError::Overflow)
+    }
+}
+
+impl TryFrom<u64> for SleepInterval {
+    type Error = SleepIntervalError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<SleepInterval> for u64 {
+    fn from(value: SleepInterval) -> Self {
+        value.0
+    }
+}
+
+impl Serialize for SleepInterval {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for SleepInterval {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = u64::deserialize(deserializer)?;
+        SleepInterval::new(value).map_err(|err| de::Error::custom(err.to_string()))
+    }
+}
+
+impl ToSql<BigInt, Sqlite> for SleepInterval {
+    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Sqlite>) -> diesel::serialize::Result {
+        let value = self
+            .as_i64()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>)?;
+        out.set_value(value);
+        Ok(IsNull::No)
+    }
+}
+
+impl FromSql<BigInt, Sqlite> for SleepInterval {
+    fn from_sql(bytes: SqliteValue<'_, '_, '_>) -> diesel::deserialize::Result<Self> {
+        let value = i64::from_sql(bytes)?;
+        if value <= 0 {
+            return Err(Box::new(SleepIntervalError::NonPositive));
+        }
+        let unsigned = u64::try_from(value).map_err(|_| {
+            Box::new(SleepIntervalError::Overflow) as Box<dyn std::error::Error + Send + Sync>
+        })?;
+        SleepInterval::new(unsigned)
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>)
     }
 }
 
 impl<'de> Deserialize<'de> for IpVersion {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         let v = i32::deserialize(deserializer)?;
         match v {
@@ -94,8 +172,7 @@ pub struct DynDNS {
     pub ip: IpVersion,
     #[validate(length(min = 1), custom(function = "validate_interface"))]
     pub interface: String,
-    #[validate(range(min = 1))]
-    pub sleep_interval: i32,
+    pub sleep_interval: SleepInterval,
 }
 
 fn validate_interface(interface: &str) -> Result<(), ValidationError> {
@@ -177,7 +254,7 @@ impl DynDNS {
         .map_err(|e| e.into())
     }
 
-    pub async fn get_sleep_interval(conn: &DbConn) -> Result<i32, Error> {
+    pub async fn get_sleep_interval(conn: &DbConn) -> Result<SleepInterval, Error> {
         conn.interact(|conn| dyndns::table.select(dyndns::sleep_interval).first(conn))
             .await?
             .map_err(|e| e.into())

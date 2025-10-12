@@ -9,7 +9,7 @@ diesel::table! {
         hostname -> Text,
         ip -> Integer,
         interface -> Text,
-        sleep_interval -> Integer,
+        sleep_interval -> BigInt,
     }
 }
 
