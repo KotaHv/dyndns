@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
-use std::{env, sync::Arc};
+use std::{env, path::PathBuf, sync::Arc};
 
 use axum::{Router, extract::FromRef};
 
@@ -10,7 +10,7 @@ use dotenvy::dotenv;
 use tokio::{net::TcpListener, signal, sync::watch};
 use tower_http::{
     cors::{Any, CorsLayer},
-    services::ServeDir,
+    services::{ServeDir, ServeFile},
 };
 
 mod api;
@@ -59,9 +59,16 @@ async fn main() {
         interval_tx,
         auth,
     };
+    let web_dir = PathBuf::from(&CONFIG.web_dir);
+    let index_file = web_dir.join("index.html");
+    let favicon_file = web_dir.join("favicon.ico");
+    let assets_dir = web_dir.join("assets");
+
     let app = Router::new()
         .nest("/api", api::routes(&state))
-        .fallback_service(ServeDir::new(&CONFIG.web_dir))
+        .route_service("/", ServeFile::new(index_file))
+        .route_service("/favicon.ico", ServeFile::new(favicon_file))
+        .nest_service("/assets", ServeDir::new(assets_dir))
         .layer(middleware::trace::TraceLayer)
         .layer(cors)
         .with_state(state);
