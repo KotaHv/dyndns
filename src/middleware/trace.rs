@@ -6,7 +6,7 @@ use std::{
 
 use axum::http::{Request, Response};
 use futures_util::ready;
-use pin_project::pin_project;
+use pin_project_lite::pin_project;
 use tokio::time::Instant;
 use tower::{Layer, Service};
 use yansi::Paint;
@@ -53,13 +53,14 @@ where
     }
 }
 
-#[pin_project]
-pub struct TraceFuture<F> {
-    #[pin]
-    response_future: F,
-    start: Instant,
-    method: String,
-    path: String,
+pin_project! {
+    pub struct TraceFuture<F> {
+        #[pin]
+        response_future: F,
+        start: Instant,
+        method: String,
+        path: String,
+    }
 }
 
 impl<F, ResBody, E> Future for TraceFuture<F>

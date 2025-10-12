@@ -669,7 +669,7 @@ dependencies = [
  "libsqlite3-sys",
  "local-ip-address",
  "once_cell",
- "pin-project",
+ "pin-project-lite",
  "rand_core",
  "serde",
  "serde_json",

@@ -10,7 +10,7 @@ use axum::{
     http::header::AUTHORIZATION,
     response::{IntoResponse, Response},
 };
-use pin_project::pin_project;
+use pin_project_lite::pin_project;
 use tower::{Layer, Service};
 
 use crate::{Error, auth::AuthManager};
@@ -91,22 +91,30 @@ where
     }
 }
 
-#[pin_project(project = AuthFutureProj)]
-pub enum AuthFuture<F> {
-    Authorized {
-        #[pin]
-        inner: F,
-    },
-    Unauthorized(Option<Response>),
+pin_project! {
+    #[project = AuthFutureProj]
+    pub enum AuthFuture<F> {
+        Authorized {
+            #[pin]
+            inner: F,
+        },
+        Unauthorized {
+            response: Option<Response>,
+        },
+    }
 }
 
 impl<F> AuthFuture<F> {
     fn unauthorized_msg(message: &'static str, code: &'static str) -> Self {
-        Self::Unauthorized(Some(Error::unauthorized(message, code).into_response()))
+        Self::Unauthorized {
+            response: Some(Error::unauthorized(message, code).into_response()),
+        }
     }
 
     fn unauthorized_error(error: Error) -> Self {
-        Self::Unauthorized(Some(error.into_response()))
+        Self::Unauthorized {
+            response: Some(error.into_response()),
+        }
     }
 
     fn authorized(inner: F) -> Self {
@@ -124,7 +132,7 @@ where
         let this = self.project();
         match this {
             AuthFutureProj::Authorized { inner } => inner.poll(cx),
-            AuthFutureProj::Unauthorized(response) => {
+            AuthFutureProj::Unauthorized { response } => {
                 let response = response.take().expect("AuthFuture polled after completion");
                 Poll::Ready(Ok(response))
             }

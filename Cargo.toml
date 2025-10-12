@@ -27,7 +27,7 @@ chrono = { version = "0.4.42", default-features = false, features = [
     "serde",
 ] }
 local-ip-address = "0.6.5"
-pin-project = "1.1.10"
+pin-project-lite = "0.2"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = [
     "fmt",
