@@ -40,8 +40,9 @@ yansi = "1.0.1"
 thiserror = "2.0.16"
 is-terminal = "0.4.16"
 validator = { version = "0.20.0", features = ["derive"] }
-jsonwebtoken = { version = "10.0.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.0.0", features = ["aws_lc_rs"] }
 argon2 = "0.5.3"
+rand_core = { version = "0.6", features = ["getrandom"] }
 base64 = "0.22"
 isahc = { version = "1.7.2", default-features = false, features = [
     "http2",
