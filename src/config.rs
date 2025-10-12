@@ -3,12 +3,12 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
-use figment::{Figment, providers::Env};
+use config::{Config as ConfigLoader, Environment};
 use is_terminal::IsTerminal;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
-const PREFIX: &'static str = "DYNDNS_";
+const PREFIX: &str = "DYNDNS";
 
 pub static CONFIG: Lazy<Config> = Lazy::new(|| init_config());
 
@@ -167,9 +167,21 @@ impl Config {
 }
 
 pub fn init_config() -> Config {
-    let config = Figment::from(Env::prefixed(PREFIX))
-        .merge(Env::prefixed(PREFIX).split("_"))
-        .extract::<Config>();
+    let config = ConfigLoader::builder()
+        .add_source(
+            Environment::with_prefix(PREFIX)
+                .separator("_")
+                .try_parsing(true),
+        )
+        .add_source(
+            Environment::with_prefix(PREFIX)
+                .separator("__")
+                .prefix_separator("_")
+                .try_parsing(true),
+        )
+        .build()
+        .and_then(|cfg| cfg.try_deserialize::<Config>());
+
     match config {
         Ok(config) => {
             if let Err(err) = config.auth.validate() {
