@@ -1,6 +1,6 @@
-FROM ghcr.io/kotahv/dyndns-vue:latest as dyndns-vue
+FROM ghcr.io/kotahv/dyndns-vue:latest AS dyndns-vue
 
-FROM rust:1.68-alpine as builder
+FROM rust:1.68-alpine AS builder
 
 RUN apk add --no-cache musl-dev
 

@@ -1,6 +1,6 @@
-FROM ghcr.io/kotahv/dyndns-vue:latest as dyndns-vue
+FROM ghcr.io/kotahv/dyndns-vue:latest AS dyndns-vue
 
-FROM alpine:latest as builder
+FROM alpine:latest AS builder
 
 ARG DOWNLOAD_BASE
 RUN ARCH=$(uname -m | sed -e "s/armv7l/armv7-unknown-linux-musleabihf/g" | sed -e "s/aarch64/aarch64-unknown-linux-musl/g" | sed -e "s/x86_64/x86_64-unknown-linux-musl/g") && \
