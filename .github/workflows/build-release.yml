@@ -17,10 +17,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-musl
-          - armv7-unknown-linux-musleabihf
-          - aarch64-unknown-linux-musl
+        include:
+          - target: x86_64-unknown-linux-musl
+            artifact: dyndns-amd64
+          - target: armv7-unknown-linux-musleabihf
+            artifact: dyndns-armv7
+          - target: aarch64-unknown-linux-musl
+            artifact: dyndns-arm64
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
@@ -34,12 +37,46 @@ jobs:
         timeout-minutes: 120
         run: |
           cross build --release --target ${{ matrix.target }} &&
-          cp target/${{ matrix.target }}/release/dyndns target/${{ matrix.target }}/release/dyndns-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/dyndns target/${{ matrix.target }}/release/dyndns-${{ matrix.target }} &&
+          mkdir -p artifacts &&
+          cp target/${{ matrix.target }}/release/dyndns artifacts/${{ matrix.artifact }}
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v2
         with:
           files: target/${{ matrix.target }}/release/dyndns-${{ matrix.target }}
           prerelease: ${{ contains(github.ref, '-') }}
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.artifact }}
+          if-no-files-found: error
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-cross
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download binaries
+        uses: actions/download-artifact@v5
+        with:
+          pattern: dyndns-*
+          merge-multiple: true
+          path: dist
+          if-no-files-found: error
+      - name: Verify binaries
+        run: |
+          set -euo pipefail
+          for file in dist/dyndns-amd64 dist/dyndns-arm64 dist/dyndns-armv7; do
+            if [ ! -f "$file" ]; then
+              echo "Missing binary: $file" >&2
+              exit 1
+            fi
+          done
+      - name: Generate App Version
+        run: echo "VERSIONED_TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_ENV"
+      - name: set lower case owner name
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Setup Docker Buildx
@@ -50,18 +87,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Generate App Version
-        run: echo "VERSIONED_TAG=$(git describe --tags --always)" >> "$GITHUB_ENV"
-      - name: set lower case owner name
-        run: |
-          echo "OWNER_LC=${OWNER,,}" >> "$GITHUB_ENV"
-        env:
-          OWNER: "${{ github.repository_owner }}"
       - name: Build and release Docker images
         uses: docker/build-push-action@v6
         with:
           file: Dockerfile.action
-          build-args: "DOWNLOAD_BASE=https://github.com/${{ github.repository }}/releases/download/${{ env.VERSIONED_TAG }}"
+          context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/${{ env.IMAGE_NAME }}:latest
