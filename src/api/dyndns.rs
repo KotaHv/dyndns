@@ -18,9 +18,14 @@ pub fn routes() -> Router<AppState> {
 
 async fn get_dyndns(State(pool): State<DbPool>) -> Result<Json<DynDNS>, Error> {
     let conn = pool.get().await?;
-    let res = DynDNS::get(&conn).await?;
-
-    Ok(Json(res))
+    match DynDNS::get_option(&conn).await? {
+        Some(res) => Ok(Json(res)),
+        None => Err(Error::Custom {
+            status: StatusCode::NOT_FOUND,
+            reason: "DynDNS configuration not set yet".into(),
+            code: Some("dyndns_not_configured"),
+        }),
+    }
 }
 
 async fn create_dyndns(
