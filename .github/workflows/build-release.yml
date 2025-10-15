@@ -124,4 +124,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: target/${{ matrix.target }}/release/dyndns-${{ matrix.target }}
-          prerelease: ${{ contains(github.ref, '-') }}
+          prerelease: ${{ contains(github.ref, '-dev') }}
