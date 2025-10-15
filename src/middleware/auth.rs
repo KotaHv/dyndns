@@ -84,7 +84,7 @@ where
                 "invalid_authorization_header",
             );
         };
-        match self.auth.verify_token(token) {
+        match self.auth.verify_access_token(token) {
             Ok(_) => AuthFuture::authorized(self.inner.call(req)),
             Err(err) => AuthFuture::unauthorized_error(err),
         }

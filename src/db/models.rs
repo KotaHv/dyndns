@@ -529,4 +529,22 @@ impl AuthSecretRecord {
         .await??;
         Ok(())
     }
+
+    pub async fn load_or_create(pool: &crate::DbPool) -> Result<String, Error> {
+        let conn = pool.get().await?;
+
+        if let Some(existing) = Self::get(&conn).await? {
+            return Ok(existing.secret);
+        }
+
+        let secret = crate::util::random_urlsafe_string(64);
+        let record = AuthSecretRecord {
+            id: 1,
+            secret: secret.clone(),
+            created_at: Utc::now().naive_utc(),
+        };
+
+        Self::insert(&conn, record).await?;
+        Ok(secret)
+    }
 }
