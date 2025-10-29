@@ -50,7 +50,7 @@ impl<'a> Ipv6Checker<'a> {
         }
 
         if ipv6_addresses.is_empty() {
-            return Err(Error::Ipv6NotFound);
+            return Err(Error::ipv6_not_found());
         }
 
         Ok(ipv6_addresses)
@@ -63,7 +63,9 @@ impl<'a> Ipv6Checker<'a> {
             .unwrap();
         let mut response = client.send_async(request).await?;
         let ip = response.text().await?;
-        ip.trim().parse().map_err(|_err| Error::IPv6ParseError(ip))
+        ip.trim()
+            .parse()
+            .map_err(|_err| Error::ipv6_parse_error(ip))
     }
 }
 

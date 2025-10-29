@@ -3,7 +3,9 @@ use chrono::{DateTime, Duration, Utc};
 use diesel::result::{DatabaseErrorKind, Error as DieselResultError};
 use sha2::{Digest, Sha256};
 
-use crate::{DbPool, Error, db::RefreshTokenRecord, util::random_urlsafe_string};
+use crate::{
+    DbPool, Error, db::RefreshTokenRecord, error::DatabaseError, util::random_urlsafe_string,
+};
 
 use subtle::ConstantTimeEq;
 
@@ -38,10 +40,10 @@ impl RefreshTokenService {
 
             match RefreshTokenRecord::insert(&conn, record).await {
                 Ok(()) => break payload.token,
-                Err(Error::Diesel(DieselResultError::DatabaseError(
+                Err(Error::Database(DatabaseError::Diesel(DieselResultError::DatabaseError(
                     DatabaseErrorKind::UniqueViolation,
                     _,
-                ))) => continue,
+                )))) => continue,
                 Err(err) => return Err(err),
             }
         };

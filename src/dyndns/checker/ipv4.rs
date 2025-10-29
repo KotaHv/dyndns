@@ -36,7 +36,9 @@ impl<'a> Ipv4Checker<'a> {
             .unwrap();
         let mut response = client.send_async(request).await?;
         let ip = response.text().await?;
-        ip.trim().parse().map_err(|_err| Error::IPv4ParseError(ip))
+        ip.trim()
+            .parse()
+            .map_err(|_err| Error::ipv4_parse_error(ip))
     }
 }
 

@@ -1,4 +1,3 @@
-use axum::http::StatusCode;
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, errors::ErrorKind};
 use serde::{Deserialize, Serialize};
@@ -39,13 +38,8 @@ impl AccessTokenService {
             iat: now.timestamp(),
         };
         let header = Header::new(Algorithm::HS256);
-        let token = jsonwebtoken::encode(&header, &claims, &self.encoding_key).map_err(|err| {
-            Error::Custom {
-                status: StatusCode::INTERNAL_SERVER_ERROR,
-                reason: format!("failed to encode auth token: {err}"),
-                code: Some("token_encoding_failed"),
-            }
-        })?;
+        let token = jsonwebtoken::encode(&header, &claims, &self.encoding_key)
+            .map_err(|err| Error::token_encoding_failed(err.to_string()))?;
 
         Ok((token, expires_at))
     }

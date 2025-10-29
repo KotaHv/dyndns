@@ -1,7 +1,6 @@
 use axum::{
     Json, Router,
     extract::{FromRequest, Request, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
@@ -20,11 +19,7 @@ async fn get_dyndns(State(pool): State<DbPool>) -> Result<Json<DynDNS>, Error> {
     let conn = pool.get().await?;
     match DynDNS::get_option(&conn).await? {
         Some(res) => Ok(Json(res)),
-        None => Err(Error::Custom {
-            status: StatusCode::NOT_FOUND,
-            reason: "DynDNS configuration not set yet".into(),
-            code: Some("dyndns_not_configured"),
-        }),
+        None => Err(Error::dyn_dns_not_configured()),
     }
 }
 
@@ -63,12 +58,7 @@ where
             .await
             .map_err(IntoResponse::into_response)?;
         if let Err(e) = dyndns.validate() {
-            return Err(Error::Custom {
-                status: StatusCode::BAD_REQUEST,
-                reason: e.to_string(),
-                code: Some("validation_failed"),
-            }
-            .into_response());
+            return Err(Error::validation_failed(e.to_string()).into_response());
         }
 
         Ok(dyndns)
