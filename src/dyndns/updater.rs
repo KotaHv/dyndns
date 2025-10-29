@@ -25,16 +25,11 @@ const DYNDNS_GOOD: &str = "good";
 pub struct DynDnsUpdater<'a> {
     client: &'a HttpClient,
     auth: DynDnsAuth<'a>,
-    hostname: &'a str,
 }
 
 impl<'a> DynDnsUpdater<'a> {
-    pub fn new(client: &'a HttpClient, auth: DynDnsAuth<'a>, hostname: &'a str) -> Self {
-        Self {
-            client,
-            auth,
-            hostname,
-        }
+    pub fn new(client: &'a HttpClient, auth: DynDnsAuth<'a>) -> Self {
+        Self { client, auth }
     }
 
     pub async fn apply(
@@ -50,24 +45,45 @@ impl<'a> DynDnsUpdater<'a> {
         }
 
         let myip = MyIp::new(ipv4.external.as_ref(), ipv6.external.as_ref());
-        let params = DynDnsParams::new(self.hostname, myip);
+        let params = DynDnsParams::new(self.auth.hostname, myip);
 
         let ip_summary = params.myip.to_string();
-        let client = DynDnsApiClient::new(
-            self.client,
-            self.auth.server,
-            self.auth.username,
-            self.auth.password,
-            params,
-        );
-
         info!("ip address changed, start update: {}", ip_summary);
-        if client.update().await? {
+
+        if self.update(params).await? {
             info!("Successful update!");
             return Ok(true);
         }
 
         Ok(false)
+    }
+
+    async fn update(&self, params: DynDnsParams<'_, '_>) -> Result<bool, Error> {
+        let url = format!(
+            "https://{server}/nic/update?hostname={hostname}&myip={myip}",
+            server = self.auth.server,
+            hostname = params.hostname,
+            myip = params.myip
+        );
+
+        let request = Request::get(url)
+            .authentication(Authentication::basic())
+            .credentials(Credentials::new(self.auth.username, self.auth.password))
+            .body(())
+            .unwrap();
+
+        let mut response = self.client.send_async(request).await?;
+        let status = response.status();
+        let body = response.text().await?;
+        let message = body.trim().to_string();
+
+        if status.is_success() && message == DYNDNS_GOOD {
+            debug!("{}", DYNDNS_GOOD);
+            Ok(true)
+        } else {
+            error!("code: {status}, msg: {message}");
+            Ok(false)
+        }
     }
 }
 
@@ -116,18 +132,11 @@ impl<'a, 'b> DynDnsParams<'a, 'b> {
     }
 }
 
-struct DynDnsApiClient<'a, 'b> {
-    client: &'a HttpClient,
-    server: &'a str,
-    username: &'a str,
-    password: &'a str,
-    params: DynDnsParams<'a, 'b>,
-}
-
 pub struct DynDnsAuth<'a> {
     pub server: &'a str,
     pub username: &'a str,
     pub password: &'a str,
+    pub hostname: &'a str,
 }
 
 impl<'a> From<&'a DynDNS> for DynDnsAuth<'a> {
@@ -136,49 +145,7 @@ impl<'a> From<&'a DynDNS> for DynDnsAuth<'a> {
             server: value.server.as_str(),
             username: value.username.as_str(),
             password: value.password.as_str(),
-        }
-    }
-}
-
-impl<'a, 'b> DynDnsApiClient<'a, 'b> {
-    fn new(
-        client: &'a HttpClient,
-        server: &'a str,
-        username: &'a str,
-        password: &'a str,
-        params: DynDnsParams<'a, 'b>,
-    ) -> Self {
-        Self {
-            client,
-            server,
-            username,
-            password,
-            params,
-        }
-    }
-
-    async fn update(&self) -> Result<bool, Error> {
-        let url = format!(
-            "https://{server}/nic/update?hostname={hostname}&myip={myip}",
-            server = self.server,
-            hostname = self.params.hostname,
-            myip = self.params.myip
-        );
-        let request = Request::get(url)
-            .authentication(Authentication::basic())
-            .credentials(Credentials::new(self.username, self.password))
-            .body(())
-            .unwrap();
-        let mut response = self.client.send_async(request).await?;
-        let status = response.status();
-        let message = response.text().await?;
-        let message = message.trim().to_string();
-        if status.is_success() && message == DYNDNS_GOOD {
-            debug!("{}", DYNDNS_GOOD);
-            Ok(true)
-        } else {
-            error!("code: {status}, msg: {message}");
-            Ok(false)
+            hostname: value.hostname.as_str(),
         }
     }
 }

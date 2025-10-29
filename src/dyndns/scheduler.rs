@@ -104,7 +104,7 @@ impl DynDnsScheduler {
         };
 
         let auth = DynDnsAuth::from(&config);
-        let updater = DynDnsUpdater::new(&self.client, auth, config.hostname.as_str());
+        let updater = DynDnsUpdater::new(&self.client, auth);
         let updated = updater.apply(&ipv4_result, &ipv6_result).await?;
 
         if updated {
