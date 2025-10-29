@@ -2,6 +2,7 @@ use crate::Error;
 
 pub mod ipv4;
 pub mod ipv6;
+pub mod parser;
 
 #[derive(Debug)]
 pub struct CheckResult<P, C, E> {

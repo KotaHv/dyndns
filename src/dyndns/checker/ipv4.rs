@@ -9,7 +9,10 @@ use isahc::{
 use crate::Error;
 
 use super::super::http_client::HttpClient;
-use super::{CheckResult, IpChecker};
+use super::{
+    CheckResult, IpChecker,
+    parser::{IpLookupParser, PlainTextIpParser},
+};
 
 const LOOKUP_URL: &str = "https://api-ipv4.ip.sb/ip";
 
@@ -38,10 +41,7 @@ impl<'a> Ipv4Checker<'a> {
         let mut response = client.send_async(request).await?;
         let body = response.text().await?;
 
-        let trimmed = body.trim();
-        trimmed
-            .parse()
-            .map_err(|_err| Error::ipv4_parse_error(body))
+        PlainTextIpParser.parse(&body)
     }
 }
 
