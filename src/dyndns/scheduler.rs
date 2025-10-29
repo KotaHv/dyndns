@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use isahc::{HttpClient, config::Configurable};
 use tokio::{sync::watch, time};
 
 use crate::{
@@ -14,6 +13,7 @@ use super::{
         ipv6::{Ipv6CheckResult, Ipv6Checker, Ipv6HistorySnapshot, parse_ipv6_list},
         run_checker,
     },
+    http_client::HttpClient,
     updater::{DynDnsAuth, DynDnsUpdater},
 };
 
@@ -42,14 +42,7 @@ impl DynDnsScheduler {
         interval_rx: watch::Receiver<u64>,
         shutdown_rx: watch::Receiver<bool>,
     ) -> Self {
-        let client = HttpClient::builder()
-            .timeout(Duration::from_secs(5))
-            .default_header(
-                "user-agent",
-                format!("dyndns/{}", env!("CARGO_PKG_VERSION")),
-            )
-            .build()
-            .unwrap();
+        let client = HttpClient::new(3, Duration::from_millis(200));
         let interval_secs = Self::load_interval_seconds(&pool).await;
         Self {
             pool,

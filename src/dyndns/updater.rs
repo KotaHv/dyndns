@@ -15,18 +15,21 @@ use crate::Error;
 
 use crate::db::DynDNS;
 
-use super::checker::{ipv4::Ipv4CheckResult, ipv6::Ipv6CheckResult};
+use super::{
+    checker::{ipv4::Ipv4CheckResult, ipv6::Ipv6CheckResult},
+    http_client::HttpClient,
+};
 
 const DYNDNS_GOOD: &str = "good";
 
 pub struct DynDnsUpdater<'a> {
-    client: &'a isahc::HttpClient,
+    client: &'a HttpClient,
     auth: DynDnsAuth<'a>,
     hostname: &'a str,
 }
 
 impl<'a> DynDnsUpdater<'a> {
-    pub fn new(client: &'a isahc::HttpClient, auth: DynDnsAuth<'a>, hostname: &'a str) -> Self {
+    pub fn new(client: &'a HttpClient, auth: DynDnsAuth<'a>, hostname: &'a str) -> Self {
         Self {
             client,
             auth,
@@ -114,7 +117,7 @@ impl<'a, 'b> DynDnsParams<'a, 'b> {
 }
 
 struct DynDnsApiClient<'a, 'b> {
-    client: &'a isahc::HttpClient,
+    client: &'a HttpClient,
     server: &'a str,
     username: &'a str,
     password: &'a str,
@@ -139,7 +142,7 @@ impl<'a> From<&'a DynDNS> for DynDnsAuth<'a> {
 
 impl<'a, 'b> DynDnsApiClient<'a, 'b> {
     fn new(
-        client: &'a isahc::HttpClient,
+        client: &'a HttpClient,
         server: &'a str,
         username: &'a str,
         password: &'a str,
@@ -168,10 +171,8 @@ impl<'a, 'b> DynDnsApiClient<'a, 'b> {
             .unwrap();
         let mut response = self.client.send_async(request).await?;
         let status = response.status();
-        let message = match response.text().await {
-            Ok(text) => text.trim().to_string(),
-            Err(err) => format!("{err:?}"),
-        };
+        let message = response.text().await?;
+        let message = message.trim().to_string();
         if status.is_success() && message == DYNDNS_GOOD {
             debug!("{}", DYNDNS_GOOD);
             Ok(true)
