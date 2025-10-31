@@ -59,6 +59,8 @@ pub enum NetworkError {
     Interface(#[from] LocalIpError),
     #[error("ipv6 not found")]
     Ipv6NotFound,
+    #[error("ipv4 not found")]
+    Ipv4NotFound,
     #[error("Failed to parse IPv4 address : {0}")]
     IPv4ParseError(String),
     #[error("Failed to parse IPv6 address : {0}")]
@@ -130,6 +132,10 @@ impl Error {
         NetworkError::Ipv6NotFound.into()
     }
 
+    pub fn ipv4_not_found() -> Self {
+        NetworkError::Ipv4NotFound.into()
+    }
+
     fn status_code(&self) -> StatusCode {
         match self {
             Error::Database(DatabaseError::Diesel(DieselError::NotFound)) => StatusCode::NOT_FOUND,
@@ -162,6 +168,7 @@ impl Error {
                 NetworkError::Http(_) => Some("http_client_error"),
                 NetworkError::Interface(_) => Some("interface_error"),
                 NetworkError::Ipv6NotFound => Some("ipv6_not_found"),
+                NetworkError::Ipv4NotFound => Some("ipv4_not_found"),
                 NetworkError::IPv4ParseError(_) => Some("ipv4_parse_error"),
                 NetworkError::IPv6ParseError(_) => Some("ipv6_parse_error"),
             },

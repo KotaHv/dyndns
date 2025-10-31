@@ -1,47 +1,26 @@
 use std::net::Ipv4Addr;
 
-use isahc::{
-    Request,
-    config::{Configurable, NetworkInterface},
-    prelude::AsyncReadResponseExt,
-};
-
 use crate::Error;
 
-use super::super::http_client::HttpClient;
-use super::{
-    CheckResult, IpChecker,
-    parser::{IpLookupParser, PlainTextIpParser},
+use super::super::{
+    http_client::HttpClient,
+    lookup::{HttpIpLookup, IpLookup, IpsbLookup, PlainTextIpParser},
 };
-
-const LOOKUP_URL: &str = "https://api-ipv4.ip.sb/ip";
+use super::{CheckResult, IpChecker};
 
 pub type Ipv4CheckResult = CheckResult<Option<Ipv4Addr>, Option<Ipv4Addr>, Option<Ipv4Addr>>;
 
 pub struct Ipv4Checker<'a> {
-    client: &'a HttpClient,
-    interface: &'a str,
+    lookup: IpsbLookup<'a, Ipv4Addr>,
     previous_ip: Option<Ipv4Addr>,
 }
 
 impl<'a> Ipv4Checker<'a> {
     pub fn new(client: &'a HttpClient, interface: &'a str, previous_ip: Option<Ipv4Addr>) -> Self {
         Self {
-            client,
-            interface,
+            lookup: HttpIpLookup::<PlainTextIpParser, Ipv4Addr>::ipsb(client, interface),
             previous_ip,
         }
-    }
-
-    async fn get_external_address(client: &HttpClient, interface: &str) -> Result<Ipv4Addr, Error> {
-        let request = Request::get(LOOKUP_URL)
-            .interface(NetworkInterface::name(interface))
-            .body(())
-            .unwrap();
-        let mut response = client.send_async(request).await?;
-        let body = response.text().await?;
-
-        PlainTextIpParser.parse(&body)
     }
 }
 
@@ -54,13 +33,12 @@ impl<'a> IpChecker for Ipv4Checker<'a> {
         debug!("check v4");
 
         let Self {
-            client,
-            interface,
+            lookup,
             previous_ip,
         } = self;
 
         debug!("{:?}", previous_ip);
-        let current_ip = Self::get_external_address(client, interface).await?;
+        let current_ip = lookup.lookup().await?;
 
         if let Some(existing) = previous_ip {
             if existing == current_ip {
